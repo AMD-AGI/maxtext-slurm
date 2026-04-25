@@ -1,0 +1,28 @@
+--- a/library/src/amd_detail/rocblaslt/src/tensile_host.cpp
++++ b/library/src/amd_detail/rocblaslt/src/tensile_host.cpp
+@@ -1665,6 +1665,12 @@
+         tensileProblem.setSwizzleTensorA(prob.swizzleA);
+         tensileProblem.setSwizzleTensorB(prob.swizzleB);
+ 
++        static const bool s_deterministic = [] {
++            const char* env = getenv("HIPBLASLT_DETERMINISTIC");
++            return env && (env[0] == '1');
++        }();
++        tensileProblem.setDeterministicMode(s_deterministic);
++
+         return tensileProblem;
+     }
+ 
+@@ -1852,6 +1858,12 @@
+ 
+         tensileProblem.setSwizzleTensorA(prob.swizzleA);
+         tensileProblem.setSwizzleTensorB(prob.swizzleB);
++
++        static const bool s_deterministic = [] {
++            const char* env = getenv("HIPBLASLT_DETERMINISTIC");
++            return env && (env[0] == '1');
++        }();
++        tensileProblem.setDeterministicMode(s_deterministic);
+     }
+ 
+     /***************************************************************

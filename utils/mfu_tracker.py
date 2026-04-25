@@ -18,6 +18,8 @@ import re
 import subprocess
 import sys
 
+import deterministic
+
 # ---------------------------------------------------------------------------
 # Peak TFLOPS table  (gpu x dtype, dense, NO sparsity)
 # ---------------------------------------------------------------------------
@@ -245,6 +247,8 @@ class _MFUStream(io.TextIOBase):
                 mfu = float(m.group(1)) / self._peak * 100.0
                 pos = m.end()
                 text = f"{text[:pos]}, MFU: {mfu:.2f}%{text[pos:]}"
+        if "loss:" in text:
+            deterministic.extract_loss(text)
         return self._wrapped.write(text)
 
     def writelines(self, lines):
@@ -499,7 +503,9 @@ def main():
     _maybe_tag_profiler_output_with_local_rank()  # no-op in 1-node/proc mode
     setup(argv)
     from MaxText import train as maxtext_train
+    deterministic.apply_patches(maxtext_train)
     maxtext_train.main(["maxtext_train"] + argv)
+    deterministic.print_loss_checksum()
 
 
 if __name__ == "__main__":

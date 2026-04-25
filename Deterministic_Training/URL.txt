@@ -1,0 +1,4 @@
+https://developer.nvidia.com/blog/controlling-floating-point-determinism-in-nvidia-cccl/
+https://medium.com/@sevakavakians/unlocking-deterministic-machine-learning-5a134539fbc4
+https://github.com/NVIDIA/framework-reproducibility
+https://github.com/AMD-AGI/Primus/pull/376

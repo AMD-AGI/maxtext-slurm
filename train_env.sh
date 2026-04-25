@@ -83,6 +83,59 @@ fi
 XLA_FLAGS="${XLA_FLAGS:+$XLA_FLAGS }--xla_gpu_enable_command_buffer=''"
 export XLA_FLAGS
 
+# ---- Deterministic mode (enable via _env_DETERMINISTIC_MODE=1) ----
+# Addresses: XLA autotuning, TE non-deterministic kernels, RCCL reduction
+# order, and JAX PRNG. See also: utils/deterministic.py for the PRNG override
+# (MaxText hardcodes unsafe_rbg, which must be overridden post-init).
+DETERMINISTIC_MODE="${DETERMINISTIC_MODE:-${EXTRACTED_ENV_MAP[DETERMINISTIC_MODE]:-0}}"
+if [[ "${DETERMINISTIC_MODE,,}" =~ ^(1|y|yes|true)$ ]]; then
+    echo "[deterministic] Enabled (DETERMINISTIC_MODE=$DETERMINISTIC_MODE)"
+    # XLA: disable autotuning, use deterministic scatter/conv/fMHA algorithms
+    XLA_FLAGS="${XLA_FLAGS:+$XLA_FLAGS }--xla_gpu_deterministic_ops=true"
+    export XLA_FLAGS
+    echo "[deterministic] XLA_FLAGS += --xla_gpu_deterministic_ops=true"
+
+    # rocBLAS + MIOpen: disable atomic reductions for deterministic GEMM/conv.
+    # This is a SEPARATE code path from xla_gpu_deterministic_ops — the two flags
+    # are disconnected. TF_DETERMINISTIC_OPS triggers rocblas_set_atomics_mode(
+    # rocblas_atomics_not_allowed) and MIOPEN_CONVOLUTION_ATTRIB_DETERMINISTIC.
+    export TF_DETERMINISTIC_OPS=1
+    echo "[deterministic] TF_DETERMINISTIC_OPS=1 (rocBLAS atomics disabled)"
+
+    # hipBLASLt: filter out non-deterministic TensileLite solutions (atomic GSU,
+    # StreamKAtomic). Requires the HIPBLASLT_DETERMINISTIC patch in tensile_host.cpp
+    # (4-line change that calls setDeterministicMode). Without the patch, this env
+    # var has no effect — hipBLASLt ignores it.
+    export HIPBLASLT_DETERMINISTIC=1
+    echo "[deterministic] HIPBLASLT_DETERMINISTIC=1 (requires patched hipBLASLt)"
+
+    # TE: force deterministic fused attention kernels (fwd + bwd)
+    export NVTE_ALLOW_NONDETERMINISTIC_ALGO=0
+    echo "[deterministic] NVTE_ALLOW_NONDETERMINISTIC_ALGO=0"
+
+    # RCCL: pin collective algorithm for reproducible reduction order.
+    # Use Ring for everything — safest for determinism and hardware compatibility.
+    # Tree allreduce + Simple protocol can SIGSEGV on newer GPUs (gfx950/MI355X).
+    # RCCL only supports per-function prefixes for NCCL_NUM_FUNCTIONS=5 entries
+    # (AllGather, AllReduce, AllToAllPivot, Broadcast, Reduce — NOT ReduceScatter).
+    # Disable MSCCL++ which has its own algorithm selection bypassing NCCL_ALGO.
+    export NCCL_ALGO="Ring"
+    export RCCL_MSCCLPP_ENABLE=0
+    echo "[deterministic] NCCL_ALGO=Ring  RCCL_MSCCLPP_ENABLE=0"
+
+    # JAX PRNG: signal deterministic.py to override MaxText's unsafe_rbg with threefry2x32
+    export JAX_DEFAULT_PRNG_IMPL=threefry2x32
+    echo "[deterministic] JAX_DEFAULT_PRNG_IMPL=threefry2x32 (applied post-init by deterministic.py)"
+
+    # CK fused attention backward is non-deterministic even with
+    # NVTE_ALLOW_NONDETERMINISTIC_ALGO=0 (both V2 and V3 backward affected).
+    # NVTE_FUSED_ATTN=0 falls back to JAX native attention which is deterministic,
+    # but requires reduced per_device_batch_size to avoid OOM (~16x throughput loss).
+    export NVTE_FUSED_ATTN=0
+    echo "[deterministic] NVTE_FUSED_ATTN=0 (CK attention disabled for bit-exact determinism)"
+    echo "[deterministic] WARNING: Unfused attention requires reduced per_device_batch_size to avoid OOM"
+fi
+
 export NCCL_CHECKS_DISABLE=1
 export NCCL_DEBUG=WARN
 #export RCCL_KERNEL_COLL_TRACE_ENABLE=1  # For debugging if needed
@@ -132,7 +185,7 @@ export HSA_NO_SCRATCH_RECLAIM=1
 export NVTE_CK_USES_BWD_V3=1
 export NVTE_CK_USES_FWD_V3=1
 export NVTE_FRAMEWORK=jax
-export NVTE_FUSED_ATTN=1
+export NVTE_FUSED_ATTN=${NVTE_FUSED_ATTN:-1}
 export NVTE_FUSED_ATTN_AOTRITON=0
 export NVTE_FUSED_ATTN_CK=1
 export NVTE_USE_CAST_TRANSPOSE_TRITON=0
@@ -141,7 +194,7 @@ export NVTE_USE_ROCM=1
 
 # ---- Composable Kernel optimizations ----
 export CK_TILE_FLOAT_TO_BFLOAT16_DEFAULT=2
-export NVTE_ALLOW_NONDETERMINISTIC_ALGO=1
+export NVTE_ALLOW_NONDETERMINISTIC_ALGO=${NVTE_ALLOW_NONDETERMINISTIC_ALGO:-1}
 export NVTE_CK_HOW_V3_BF16_CVT=2
 # Forces FP32 precision for atomic accumulation in CK V3 GEMM output writes.
 # Critical for MoE convergence: BF16 atomics (=0) cause visibly slower loss
@@ -189,8 +242,8 @@ export NCCL_IGNORE_CPU_AFFINITY=1
 export NCCL_PXN_DISABLE=0
 export NET_OPTIONAL_RECV_COMPLETION=1
 export RCCL_GDR_FLUSH_GPU_MEM_NO_RELAXED_ORDERING=0
-export RCCL_LL128_FORCE_ENABLE=1
-export RCCL_MSCCLPP_ENABLE=1
+export RCCL_LL128_FORCE_ENABLE=${RCCL_LL128_FORCE_ENABLE:-1}
+export RCCL_MSCCLPP_ENABLE=${RCCL_MSCCLPP_ENABLE:-1}
 
 #export HSA_DISABLE_CACHE=1
 #export IB_PCI_RELAXED_ORDERING=1
