@@ -187,7 +187,7 @@ Sourced by `_container.sh` before launching the container (and by `in_container_
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DOCKER_REGISTRY` | `docker.io` | Container registry for pulls |
-| `DOCKER_IMAGE` | `rocm/jax-training:maxtext-v26.1` | Docker image to run |
+| `DOCKER_IMAGE` | `rocm/jax-training:maxtext-v26.4-jax0.9.1-te2.12.0` | Docker image to run |
 | `USE_DOCKER_IMAGE_AINIC_DRIVER` | `true` | Use the container's built-in AINIC driver; set to `false` to bind-mount host IB libs instead (needed when container libionic1 mismatches host firmware) |
 | `MAXTEXT_REPO_DIR` | `/workspace/maxtext` | MaxText location inside the container |
 | `MAXTEXT_PATCH_BRANCH` | _(empty)_ | Global patch branch (empty = image default); per-model `.env.sh` can override |

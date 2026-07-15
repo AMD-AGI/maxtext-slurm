@@ -532,7 +532,13 @@ def main():
     _maybe_preinit_jax_distributed(argv)  # no-op in 1-node/proc mode
     _maybe_tag_profiler_output_with_local_rank()  # no-op in 1-node/proc mode
     setup(argv)
-    from MaxText import train as maxtext_train
+    # MaxText package layout differs across images: newer images (v26.4+) ship a
+    # src-layout with the lowercase `maxtext` package and the pre-train entry point
+    # at `maxtext.trainers.pre_train.train`; older images expose `MaxText.train`.
+    try:
+        from maxtext.trainers.pre_train import train as maxtext_train
+    except ModuleNotFoundError:
+        from MaxText import train as maxtext_train
 
     rc = 0
     try:
