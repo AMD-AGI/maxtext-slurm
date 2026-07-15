@@ -19,7 +19,7 @@ fi
 # ── end Registry credentials ──────────────────────────────────────────────────
 
 # ── Docker image ──────────────────────────────────────────────────────────────
-DOCKER_IMAGE="${DOCKER_IMAGE:-rocm/jax-training:maxtext-v26.2}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-rocm/jax-training:maxtext-v26.4-jax0.9.1-te2.12.0}"
 USE_DOCKER_IMAGE_AINIC_DRIVER="${USE_DOCKER_IMAGE_AINIC_DRIVER:-true}"    # Use the container's built-in AINIC driver; set to false to bind-mount host IB libs instead (needed when container libionic1 mismatches host firmware)
 MAXTEXT_REPO_DIR="${MAXTEXT_REPO_DIR:-/workspace/maxtext}"                # MaxText location inside the container
 MAXTEXT_PATCH_BRANCH="${MAXTEXT_PATCH_BRANCH-}"                           # Global patch branch (explicit empty = skip checkout, use image default); per-model .env.sh can override
