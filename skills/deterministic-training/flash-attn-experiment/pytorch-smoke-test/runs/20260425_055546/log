@@ -1,0 +1,66 @@
+bash: line 2: hostname: command not found
+[smoke] Container: , Linux chi2811 6.8.0-107-generic #107-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar 13 19:51:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+[smoke] Python: Python 3.12.12
+[smoke] PyTorch: 2.12.0a0+gitdcaf562 rocm=7.0.51831
+[smoke] flash_attn not present — installing (this can take 5-30 min on first run)...
+Requirement already satisfied: filelock in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (3.25.2)
+Requirement already satisfied: typing-extensions>=4.10.0 in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (4.15.0)
+Requirement already satisfied: setuptools<82 in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (78.1.1)
+Requirement already satisfied: sympy>=1.13.3 in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (3.6.1)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (3.1.6)
+Requirement already satisfied: fsspec>=0.8.5 in /usr/local/lib/python3.12/site-packages (from torch->flash-attn) (2026.3.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.12/site-packages (from sympy>=1.13.3->torch->flash-attn) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib64/python3.12/site-packages (from jinja2->torch->flash-attn) (3.0.3)
+Building wheels for collected packages: flash-attn
+  Building wheel for flash-attn (setup.py): started
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): still running...
+  Building wheel for flash-attn (setup.py): finished with status 'done'
+  Created wheel for flash-attn: filename=flash_attn-2.8.3-cp312-cp312-linux_x86_64.whl size=56605529 sha256=599679a690b2e28d8a6502be3eaecfb30b0992db04597b862cd777295729fd92
+  Stored in directory: /root/.cache/pip/wheels/3d/59/46/f282c12c73dd4bb3c2e3fe199f1a0d0f8cec06df0cccfeee27
+Successfully built flash-attn
+Installing collected packages: flash-attn
+Successfully installed flash-attn-2.8.3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[smoke] flash_attn version: 2.8.3
+ROCm/flash-attention smoke test
+Device: AMD Radeon Graphics  (cap=(9, 5), count=8)
+Shapes: B=1 S=2048 H=8 D=128  dtype=bf16 causal=True dropout=0.0
+Seed:   42
+
+=================================================================
+Test 1 — deterministic=True, 2 runs, expect BIT-EXACT
+=================================================================
+  out: BIT-EXACT
+  dQ : BIT-EXACT
+  dK : BIT-EXACT
+  dV : BIT-EXACT
+RESULT: PASS — kernel is deterministic on this hardware
+
+=================================================================
+Test 2 — deterministic=False, 2 runs, harness sanity check
+=================================================================
+  out: identical
+  dQ : identical
+  dK : identical
+  dV : identical
+RESULT: all identical (harness can not distinguish — try a larger config)
+
+=================================================================
+Test 3 — throughput, median over 10 iterations
+=================================================================
+  deterministic=True :     0.41 ms/iter   ~   36.3 TFLOP/s (causal fwd+bwd, bf16)
+  deterministic=False:     0.39 ms/iter   ~   38.8 TFLOP/s (causal fwd+bwd, bf16)
+
+OVERALL: PASS — ROCm/flash-attention deterministic backward is bit-exact on this hardware. The JAX FFI / bridge integration is justified.

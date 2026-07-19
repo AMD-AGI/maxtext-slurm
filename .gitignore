@@ -233,3 +233,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+docker_image/
+build_hipblaslt_scanner/
+*.tar
+tmp/
+filies/
+*.BK
+BK_*
+stats_*.txt

@@ -115,17 +115,38 @@ def verify_env():
             warnings.append(f"{var}={actual!r} (expected {expected!r}). {msg}")
 
     xla_flags = os.environ.get("XLA_FLAGS", "")
-    if "--xla_gpu_deterministic_ops" not in xla_flags:
-        warnings.append(
-            "XLA_FLAGS missing --xla_gpu_deterministic_ops. "
-            "GEMM autotuning and scatter ops may be non-deterministic.")
 
-    nvte_fused = os.environ.get("NVTE_FUSED_ATTN", "1")
-    if nvte_fused != "0":
+    if "xla_gpu_autotune_level" not in xla_flags:
         warnings.append(
-            f"NVTE_FUSED_ATTN={nvte_fused!r} (expected '0'). "
-            "CK fused attention backward is non-deterministic — "
-            "results will NOT be bit-exact.")
+            "XLA_FLAGS missing --xla_gpu_autotune_level=0. "
+            "XLA may select different kernels across runs, breaking reproducibility.")
+    elif "xla_gpu_autotune_level=0" not in xla_flags:
+        warnings.append(
+            "XLA_FLAGS has xla_gpu_autotune_level != 0. "
+            "Non-zero autotune levels can select different kernels across runs.")
+
+    # CK fused attention determinism check.
+    #   Post-PR-#508 image (TE >= 2.12.0.dev0+8943023d): NVTE_FUSED_ATTN=1
+    #   uses the CK `_deterministic` kernel variants (per-split dQ + ordered
+    #   reduce). NVTE_ALLOW_NONDETERMINISTIC_ALGO=0 (already checked above)
+    #   triggers the deterministic dispatch.
+    #   Pre-PR-#508 image: TE hardcodes `false` so NVTE_FUSED_ATTN=1 is
+    #   non-deterministic and only NVTE_FUSED_ATTN=0 (unfused JAX-native
+    #   workaround) gives bit-exactness.
+    # We can't programmatically tell which image the user is on, so emit an
+    # informational note rather than a hard warning. The bit-exactness of any
+    # given run is verified post-hoc by loss_checksum + compare_runs.py
+    # regardless of which path is active.
+    nvte_fused = os.environ.get("NVTE_FUSED_ATTN", "1")
+    nvte_ck = os.environ.get("NVTE_FUSED_ATTN_CK", "1")
+    if nvte_fused == "0":
+        print(f"{tag} NVTE_FUSED_ATTN=0: legacy unfused workaround (works on any "
+              f"image; ~9.7x slower; requires per_device_batch_size=1 to avoid OOM).",
+              flush=True)
+    elif nvte_fused == "1" and nvte_ck == "1":
+        print(f"{tag} NVTE_FUSED_ATTN=1, NVTE_FUSED_ATTN_CK=1: CK deterministic "
+              f"path (requires PR-#508 image; ~6% slower than non-deterministic).",
+              flush=True)
 
     try:
         import jax

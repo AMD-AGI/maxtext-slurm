@@ -1,0 +1,24 @@
+# Persistent ROCm + PyTorch + flash-attn image so the smoke test doesn't pay
+# the ~13-min CK compile every time.
+#
+# Build:
+#   docker build -t flash-attn-rocm:gfx950 \
+#     -f skills/deterministic-training/flash-attn-experiment/pytorch-smoke-test/Dockerfile.flash-attn \
+#     skills/deterministic-training/flash-attn-experiment/pytorch-smoke-test
+#
+# Then point the wrapper at it:
+#   FA_IMAGE=flash-attn-rocm:gfx950 \
+#     bash skills/deterministic-training/flash-attn-experiment/pytorch-smoke-test/run_smoke_test.sh
+#
+# What was tested at build time on chi2811 (8x gfx950, ROCm 7.0.51831):
+#   - flash_attn 2.8.3 builds for gfx950 in ~13 min on 64 cores
+#   - deterministic=True is BIT-EXACT for out/dQ/dK/dV at B=1 S=2048 H=8 D=128
+#   - deterministic-bwd overhead at small shape: ~5% (0.41 vs 0.39 ms/iter)
+
+ARG BASE_IMAGE=rocm/pytorch-private:nan-repro-rocm7.0.2.1_apple2apple_centos
+FROM ${BASE_IMAGE}
+
+# Build flash-attn against the image's PyTorch + ROCm toolchain.
+# --no-build-isolation: use the system PyTorch (don't pull a fresh wheel).
+RUN MAX_JOBS=$(nproc) pip install --no-build-isolation flash-attn 2>&1 | tail -50 && \
+    python3 -c 'import flash_attn; print("flash_attn", flash_attn.__version__, "OK")'

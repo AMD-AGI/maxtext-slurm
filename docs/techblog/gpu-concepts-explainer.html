@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPU 执行与内存层级 · 概念辨析</title>
+<style>
+:root{
+  --bg:#0b0f17;--bg2:#111826;--card:#151d2b;--card2:#1b2536;--line:#263248;
+  --txt:#e6edf6;--mut:#93a4bd;--dim:#6b7c96;
+  --acc:#5eead4;--acc2:#818cf8;--warn:#fb7185;--ok:#4ade80;--gold:#fbbf24;--pink:#f472b6;
+  --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:linear-gradient(180deg,#0b0f17,#0c1220 60%,#0b0f17);color:var(--txt);
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft Yahei",sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{line-height:1.25;font-weight:700}
+code,.mono{font-family:var(--mono)}
+a{color:var(--acc)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+.mut{color:var(--mut)}.dim{color:var(--dim)}.acc{color:var(--acc)}.acc2{color:var(--acc2)}.warn{color:var(--warn)}.ok{color:var(--ok)}.gold{color:var(--gold)}.pink{color:var(--pink)}
+
+.nav{position:sticky;top:0;z-index:50;background:rgba(11,15,23,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;gap:6px;align-items:center;height:56px;overflow-x:auto}
+.nav .brand{font-weight:800;margin-right:12px;white-space:nowrap;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.nav a{color:var(--mut);text-decoration:none;font-size:13px;padding:6px 10px;border-radius:8px;white-space:nowrap}
+.nav a:hover{color:var(--txt);background:var(--card)}
+.termtoggle{margin-left:auto;display:flex;gap:0;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex-shrink:0}
+.termtoggle button{all:unset;cursor:pointer;font-size:12px;padding:6px 14px;color:var(--mut)}
+.termtoggle button.on{background:linear-gradient(90deg,var(--acc2),#6366f1);color:#0b0f17;font-weight:700}
+
+.hero{padding:64px 0 26px;text-align:center}
+.kicker{display:inline-block;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);padding:5px 12px;border-radius:999px;background:var(--card)}
+.hero h1{font-size:clamp(28px,5vw,44px);margin:20px 0 10px;background:linear-gradient(90deg,#e6edf6,#a5b4fc 60%,#5eead4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:720px;margin:0 auto;color:var(--mut);font-size:17px}
+
+section{padding:44px 0;border-top:1px solid var(--line)}
+h2.st{font-size:25px;margin:0 0 6px;display:flex;align-items:center;gap:12px}
+h2.st .n{font-family:var(--mono);font-size:15px;color:var(--acc2);border:1px solid var(--line);border-radius:8px;padding:3px 9px;background:var(--card)}
+.lead{color:var(--mut);margin:0 0 22px;max-width:780px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+.grid{display:grid;gap:16px}
+@media(min-width:760px){.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}}
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg2)}
+.note{border-left:3px solid var(--acc);background:var(--card);padding:12px 16px;border-radius:0 10px 10px 0;color:var(--mut)}
+.note.warn{border-color:var(--warn)}.note.gold{border-color:var(--gold)}
+button.btn{all:unset;cursor:pointer;background:linear-gradient(90deg,var(--acc2),#6366f1);color:#0b0f17;font-weight:700;padding:10px 16px;border-radius:10px;font-size:14px;text-align:center;transition:transform .1s,filter .15s}
+button.btn:hover{filter:brightness(1.08)}button.btn:active{transform:translateY(1px)}
+button.btn.ghost{background:transparent;color:var(--acc);border:1px solid var(--line)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+svg{max-width:100%;height:auto}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:10px}
+.legend .k{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+table.tb{width:100%;border-collapse:collapse;font-size:14px}
+table.tb th,table.tb td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+table.tb th{background:var(--bg2);color:var(--mut)}
+table.tb td .mono{color:var(--acc)}
+.vs{display:grid;gap:14px}
+@media(min-width:760px){.vs{grid-template-columns:1fr 1fr}}
+.vs .col{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.vs h4{margin:0 0 8px}
+.foot{padding:38px 0 70px;color:var(--dim);font-size:13px;text-align:center}
+/* hierarchy tree */
+.tree{display:flex;flex-direction:column;gap:10px}
+.tnode{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.tnode>button{all:unset;cursor:pointer;width:100%;display:flex;align-items:center;gap:12px;padding:13px 16px}
+.tnode>button:hover{background:var(--card2)}
+.tnode .lvl{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+.tnode .nm{font-weight:700}
+.tnode .alt{font-family:var(--mono);font-size:12px;color:var(--acc2)}
+.tnode .chev{margin-left:auto;color:var(--acc);transition:transform .3s}
+.tnode.open .chev{transform:rotate(90deg)}
+.tnode .body{max-height:0;overflow:hidden;transition:max-height .35s ease;color:var(--mut)}
+.tnode.open .body{max-height:260px}
+.tnode .body div{padding:0 16px 15px}
+.chip{font-family:var(--mono);font-size:11px;color:var(--acc);background:var(--bg2);border:1px solid var(--line);padding:1px 6px;border-radius:5px}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="wrap">
+  <span class="brand">GPU 概念辨析</span>
+  <a href="#exec">执行层级</a>
+  <a href="#hw">硬件与调度</a>
+  <a href="#mem">内存与作用域</a>
+  <a href="#stream">Stream</a>
+  <a href="#map">术语对照</a>
+  <a href="#confuse">易混淆</a>
+  <span class="termtoggle" id="termToggle">
+    <button data-v="rocm" class="on">ROCm/HIP</button>
+    <button data-v="cuda">CUDA</button>
+  </span>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="kicker">Thread · Warp · Workgroup · Stream · GPU</span>
+  <h1>GPU 执行与内存层级 · 概念辨析</h1>
+  <p>一次搞清 <b class="acc">thread / warp / block(workgroup) / grid / CU / stream / GPU</b> 到底谁包含谁、谁并行谁串行、谁决定确定性。
+  右上角可切换 <b class="acc2">ROCm/HIP</b> 与 <b class="acc2">CUDA</b> 术语。</p>
+</div></header>
+
+<section id="exec"><div class="wrap">
+  <h2 class="st"><span class="n">01</span> 执行层级:软件怎么组织并行</h2>
+  <p class="lead">你写一个 kernel,启动时指定"多少个 <span class="alt-block">workgroup</span>、每个多少 <span class="alt-thread">work-item</span>"。硬件把它们拆成
+  <span class="alt-warp">wavefront</span> 批量执行。点开每一层看清楚。</p>
+  <div class="tree" id="tree">
+    <div class="tnode"><button><span class="lvl">L0</span><span class="nm">Kernel / Grid</span><span class="alt">grid</span><span class="chev">▸</span></button>
+      <div class="body"><div>一次 <span class="chip">kernel launch</span> 的全部工作 = 一个 <b>grid</b>。grid 由很多
+      <span class="alt-block">workgroup</span> 组成。你在 host 端用 <span class="mono">&lt;&lt;&lt;grid, block&gt;&gt;&gt;</span>(CUDA)/
+      <span class="mono">hipLaunchKernel</span> 指定形状。<b>同一 grid 内 block 的执行顺序无保证。</b></div></div></div>
+
+    <div class="tnode"><button><span class="lvl">L1</span><span class="nm alt-block-nm">Workgroup</span><span class="alt alt-block">= thread block</span><span class="chev">▸</span></button>
+      <div class="body"><div>一组能<b>协作</b>的线程:它们跑在<b>同一个 CU/SM</b> 上,能共享 <span class="alt-lds">LDS(shared memory)</span>、能用 barrier 同步。
+      不同 workgroup <b>不能</b>互相 barrier、不共享 shared memory。<b>调度到 CU 的顺序由硬件决定 → 非确定的根源。</b></div></div></div>
+
+    <div class="tnode"><button><span class="lvl">L2</span><span class="nm alt-warp-nm">Wavefront</span><span class="alt alt-warp">= warp</span><span class="chev">▸</span></button>
+      <div class="body"><div>硬件真正的调度单位:一批 lane <b>锁步(SIMT)</b>执行同一条指令。
+      <b class="acc">AMD wavefront = 64 lane</b>(gfx9/CDNA);<b class="acc2">NVIDIA warp = 32 lane</b>。
+      一个 workgroup 被切成若干 wavefront。分支发散(divergence)就发生在这一层内。</div></div></div>
+
+    <div class="tnode"><button><span class="lvl">L3</span><span class="nm alt-thread-nm">Work-item</span><span class="alt alt-thread">= thread / lane</span><span class="chev">▸</span></button>
+      <div class="body"><div>最小执行粒度,一条 SIMT lane。有自己的<b>寄存器</b>与程序计数器(逻辑上)。
+      "thread" 在 GPU 语境≠CPU 线程——它极轻量,成千上万个同时存在。</div></div></div>
+  </div>
+  <div class="note" style="margin-top:16px"><b class="gold">包含关系:</b>
+  <span class="mono">GPU ⊃ CU/SM ⊃ (驻留的) workgroup ⊃ wavefront/warp ⊃ work-item/thread</span>。
+  注意 workgroup 是<b>软件</b>概念,CU 是<b>硬件</b>概念——一个 CU 可同时驻留多个 workgroup(取决于 occupancy)。</div>
+</div></section>
+<section id="hw"><div class="wrap">
+  <h2 class="st"><span class="n">02</span> 硬件与调度:workgroup 怎么被派到 CU(非确定的来源)</h2>
+  <p class="lead">GPU 里有很多 <span class="alt-cu">CU(compute unit)</span>。你启动的 workgroup 数量通常远多于 CU 数,
+  硬件调度器<b>动态地</b>把 workgroup 分派到空闲 CU 上——<b>顺序和时机每次运行都可能不同</b>。点"派发"多跑几次感受一下。</p>
+  <div class="card">
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn" id="dispatch">▶ 派发一次(随机顺序)</button>
+      <button class="btn ghost" id="reset">↻ 重置</button>
+      <span class="mut" style="font-size:13px">8 个 <span class="alt-block">workgroup</span> → 4 个 <span class="alt-cu">CU</span></span>
+    </div>
+    <svg viewBox="0 0 900 240" id="dispatchSvg" aria-label="dispatch"></svg>
+    <div id="dispatchOrder" class="mono" style="font-size:13px;color:var(--mut);margin-top:10px;min-height:22px"></div>
+    <div class="note warn" style="margin-top:12px"><b>为什么这会导致非确定?</b> 如果多个 workgroup 要 <span class="mono">atomicAdd</span> 到同一个 global 地址,
+    它们完成、写入的<b>先后顺序 = 上面这个随机派发/执行顺序</b>。浮点相加不满足结合律 → 顺序不同 → 结果尾数不同。
+    这正是 flash-attention 反向 <b class="acc">dQ</b> 抖的机制。</div>
+  </div>
+</div></section>
+
+<section id="mem"><div class="wrap">
+  <h2 class="st"><span class="n">03</span> 内存层级与作用域(atomic 打在哪一层很关键)</h2>
+  <p class="lead">越靠上越快越小越私有,越靠下越慢越大越共享。<b>atomicAdd 的"竞争范围"取决于变量在哪一层。</b></p>
+  <div class="card">
+  <svg viewBox="0 0 900 300" aria-label="memory">
+    <defs><marker id="am" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="#93a4bd"/></marker></defs>
+    <!-- pyramid rows -->
+    <g font-size="13">
+      <rect x="300" y="20" width="300" height="40" rx="6" fill="#0f1b17" stroke="#5eead4"/>
+      <text x="450" y="45" fill="#5eead4" text-anchor="middle">Registers / VGPR — 每个 work-item 私有</text>
+      <rect x="240" y="72" width="420" height="42" rx="6" fill="#18202f" stroke="#818cf8"/>
+      <text x="450" y="98" fill="#c7d2fe" text-anchor="middle" class="alt-lds-txt">LDS / Shared memory — workgroup 内共享</text>
+      <rect x="180" y="126" width="540" height="42" rx="6" fill="#151d2b" stroke="#334155"/>
+      <text x="450" y="152" fill="#cbd5e1" text-anchor="middle">L2 cache — 全 GPU 共享(硬件管理)</text>
+      <rect x="120" y="180" width="660" height="46" rx="6" fill="#12101a" stroke="#fb7185"/>
+      <text x="450" y="208" fill="#fecdd3" text-anchor="middle">Global memory / HBM — 全 GPU 可见(dQ 就在这里)</text>
+    </g>
+    <text x="90" y="47" fill="#5eead4" font-size="11" text-anchor="end">快 / 小 / 私有</text>
+    <text x="90" y="208" fill="#fb7185" font-size="11" text-anchor="end">慢 / 大 / 共享</text>
+    <line x1="70" y1="30" x2="70" y2="216" stroke="#334155" marker-end="url(#am)"/>
+    <!-- atomic scopes -->
+    <g font-size="12">
+      <text x="620" y="98" fill="#818cf8">atomic:workgroup 作用域</text>
+      <text x="620" y="208" fill="#fb7185">atomic:device 作用域 ← dQ</text>
+    </g>
+    <text x="450" y="255" fill="#93a4bd" font-size="12" text-anchor="middle">dQ 的 atomicAdd 打在 global memory,作用域 = 整个 device(所有 CU 上的所有 workgroup)</text>
+    <text x="450" y="278" fill="#6b7c96" font-size="11" text-anchor="middle">→ 竞争范围最大;这也是为什么"跨 workgroup"</text>
+  </svg>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="note"><b class="acc">Registers</b><br>私有,无竞争,天生确定(如 dK/dV 的寄存器累加)。</div>
+    <div class="note"><b class="acc2">LDS / Shared</b><br>workgroup 内共享。block-scope atomic 只在组内竞争。</div>
+    <div class="note warn"><b class="warn">Global / HBM</b><br>全 device 可见。device-scope atomic 跨所有 workgroup 竞争 → dQ 非确定。</div>
+  </div>
+</div></section>
+<section id="stream"><div class="wrap">
+  <h2 class="st"><span class="n">04</span> Stream:另一种并发,别和 block 搞混</h2>
+  <p class="lead"><b>Stream 是 host 端的概念</b>:它是一条"kernel/拷贝按提交顺序排队执行"的队列。
+  和 block/warp(device 端、单 kernel 内的并行)是<b>两个不同层面的东西</b>。</p>
+  <div class="vs">
+    <div class="col" style="border-color:rgba(129,140,248,.4)">
+      <h4 class="acc2">Block / Warp(device 内并行)</h4>
+      <ul class="mut" style="margin:0;padding-left:18px;line-height:1.9">
+        <li>发生在<b>单个 kernel launch 内部</b></li>
+        <li>同一个 stream、同一个 GPU</li>
+        <li>成千上万个并行,顺序由硬件调度</li>
+        <li>dQ 的 atomicAdd 竞争就在这一层(<b>跨 workgroup</b>)</li>
+      </ul>
+    </div>
+    <div class="col" style="border-color:rgba(244,114,182,.4)">
+      <h4 class="pink">Stream(host 端并发)</h4>
+      <ul class="mut" style="margin:0;padding-left:18px;line-height:1.9">
+        <li><b>不同 kernel</b> 之间的排序/重叠</li>
+        <li>同一 stream 内:按提交顺序<b>串行</b></li>
+        <li>不同 stream 之间:可<b>并发/乱序</b>(另一类非确定来源)</li>
+        <li>与单个 kernel 内的 dQ 竞争<b>无关</b></li>
+      </ul>
+    </div>
+  </div>
+  <div class="note gold" style="margin-top:14px"><b>一句话:</b> stream 决定"哪个 kernel 先跑"(host 级);block/warp 决定"一个 kernel 内部怎么并行"(device 级)。
+  dQ 的非确定是<b>后者</b>——单 kernel 内跨 workgroup 的 atomicAdd 顺序,<b>和 stream 完全无关</b>。多 stream 是<b>另一个独立</b>的非确定来源。</div>
+</div></section>
+
+<section id="map"><div class="wrap">
+  <h2 class="st"><span class="n">05</span> CUDA ↔ ROCm/HIP 术语对照</h2>
+  <p class="lead">同一个东西,两套叫法。右上角切换会同步改变全文用词。</p>
+  <div class="card" style="overflow-x:auto">
+  <table class="tb">
+    <tr><th>概念</th><th>CUDA (NVIDIA)</th><th>ROCm/HIP (AMD)</th><th>说明</th></tr>
+    <tr><td>硬件计算单元</td><td class="mono">SM (Streaming Multiprocessor)</td><td class="mono">CU (Compute Unit)</td><td>物理执行硬件</td></tr>
+    <tr><td>线程组(软件)</td><td class="mono">thread block</td><td class="mono">workgroup</td><td>可协作、共享 shared/LDS</td></tr>
+    <tr><td>SIMT 调度单位</td><td class="mono">warp = 32 lane</td><td class="mono">wavefront = 64 lane</td><td>锁步执行,注意 lane 数不同</td></tr>
+    <tr><td>最小执行体</td><td class="mono">thread</td><td class="mono">work-item</td><td>一条 SIMT lane</td></tr>
+    <tr><td>片上共享内存</td><td class="mono">shared memory</td><td class="mono">LDS (Local Data Share)</td><td>workgroup 内共享</td></tr>
+    <tr><td>整个 kernel 网格</td><td class="mono">grid</td><td class="mono">grid</td><td>一次 launch 的全部 block</td></tr>
+    <tr><td>host 端队列</td><td class="mono">stream</td><td class="mono">stream (hipStream)</td><td>kernel/拷贝排序</td></tr>
+    <tr><td>集合通信库</td><td class="mono">NCCL</td><td class="mono">RCCL</td><td>跨 GPU(又是另一层)</td></tr>
+  </table>
+  </div>
+</div></section>
+<section id="confuse"><div class="wrap">
+  <h2 class="st"><span class="n">06</span> 最容易混淆的几对</h2>
+  <div class="grid g2">
+    <div class="card"><h4 class="acc" style="margin:0 0 6px">workgroup ≠ CU</h4>
+      <p class="mut" style="margin:0">workgroup 是<b>软件</b>分组,CU 是<b>硬件</b>单元。不是 1:1——一个 CU 可同时驻留多个 workgroup(受寄存器/LDS/occupancy 限制),
+      workgroup 总数通常也远多于 CU 数,分批轮转执行。</p></div>
+    <div class="card"><h4 class="acc" style="margin:0 0 6px">thread(GPU) ≠ thread(CPU)</h4>
+      <p class="mut" style="margin:0">GPU 的 work-item 极轻量、以 warp/wavefront 为单位锁步 SIMT 执行,成千上万个并存;
+      CPU 线程重、独立控制流、数量少。别用 CPU 直觉想 GPU thread。</p></div>
+    <div class="card"><h4 class="acc" style="margin:0 0 6px">warp ≠ block</h4>
+      <p class="mut" style="margin:0">block(workgroup)是你指定的逻辑分组;warp/wavefront 是硬件把 block <b>自动切分</b>的调度批次(32 或 64 lane)。
+      一个 block 含多个 warp。同步:block 用 barrier,warp 内隐式锁步。</p></div>
+    <div class="card"><h4 class="acc" style="margin:0 0 6px">stream ≠ block 并行</h4>
+      <p class="mut" style="margin:0">stream 是 host 端 kernel 之间的排序(粗粒度、跨 kernel);block/warp 是 device 端单 kernel 内的并行(细粒度)。
+      dQ 抖属于后者,与 stream 无关。</p></div>
+    <div class="card"><h4 class="acc" style="margin:0 0 6px">并行 ≠ 无序 = 非确定</h4>
+      <p class="mut" style="margin:0">并行本身不等于非确定。只有当<b>并行的多方写同一处 + 合并顺序不定(atomicAdd)+ 操作不满足结合律(浮点)</b>三者齐了才非确定。
+      去掉任一条件(独立缓冲 / 固定顺序 / 整数)都能恢复确定。</p></div>
+    <div class="card"><h4 class="acc" style="margin:0 0 6px">atomic 保证 ≠ 顺序保证</h4>
+      <p class="mut" style="margin:0"><span class="mono">atomicAdd</span> 只保证"不丢更新、不撕裂读写",<b>不保证相加顺序</b>。
+      顺序 = 运行时 workgroup 调度 → 这才是浮点结果抖动的根。</p></div>
+  </div>
+  <div class="note gold" style="margin-top:16px"><b>确定性判据(记这一条就够):</b>
+  一个归约是否确定,只看 —— ①是否被拆到<b>多个 workgroup</b>?②若是,合并是 <b class="warn">atomicAdd(无序)</b> 还是 <b class="acc">固定顺序归约</b>?
+  单一写者 / 固定顺序 = 确定;跨 workgroup + atomicAdd = 非确定。</div>
+</div></section>
+
+<div class="foot"><div class="wrap">
+  <p>配套阅读:<a href="./deterministic-dq-explainer.html">为什么 dQ 能做到 Deterministic</a>(flash-attention 反向的具体案例)。</p>
+  <p class="dim">术语对照基于 CUDA / ROCm-HIP 官方命名。wavefront=64(gfx9/CDNA),warp=32(NVIDIA)。</p>
+</div></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ---- hierarchy accordion ---- */
+$$("#tree .tnode>button").forEach(b=>b.addEventListener("click",()=>b.parentElement.classList.toggle("open")));
+
+/* ---- terminology toggle (ROCm <-> CUDA) ---- */
+const TERMS={
+  block:{rocm:"workgroup",cuda:"thread block"},
+  thread:{rocm:"work-item",cuda:"thread"},
+  warp:{rocm:"wavefront",cuda:"warp"},
+  lds:{rocm:"LDS",cuda:"shared memory"},
+  cu:{rocm:"CU",cuda:"SM"},
+};
+function applyTerms(v){
+  document.querySelectorAll(".alt-block").forEach(e=>e.textContent = e.classList.contains("alt")? "= "+(v==="rocm"?"thread block":"workgroup") : TERMS.block[v]);
+  // simpler: set explicit spans
+  $$(".alt-block-nm").forEach(e=>e.textContent=TERMS.block[v]);
+  $$(".alt-warp-nm").forEach(e=>e.textContent=TERMS.warp[v]);
+  $$(".alt-thread-nm").forEach(e=>e.textContent=TERMS.thread[v]);
+  $$(".alt-lds-txt").forEach(e=>e.textContent=(v==="rocm"?"LDS / Shared memory":"Shared memory / LDS")+" — "+(TERMS.block[v])+" 内共享");
+  // inline word swaps
+  $$(".alt-block").forEach(e=>{ if(!e.classList.contains("alt")) e.textContent=TERMS.block[v]; });
+  $$(".alt-thread").forEach(e=>{ if(!e.classList.contains("alt")) e.textContent=TERMS.thread[v]; });
+  $$(".alt-warp").forEach(e=>{ if(!e.classList.contains("alt")) e.textContent=TERMS.warp[v]; });
+  $$(".alt-cu").forEach(e=>e.textContent=TERMS.cu[v]);
+  $$(".alt-lds").forEach(e=>{ if(!e.classList.contains("alt-lds-txt")) e.textContent=TERMS.lds[v]; });
+  // toggle buttons
+  $$("#termToggle button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+  drawDispatch(); // redraw with new labels
+}
+$$("#termToggle button").forEach(b=>b.addEventListener("click",()=>applyTerms(b.dataset.v)));
+
+/* ---- dispatch animation ---- */
+const NB=8, NC=4;
+let curTerm="rocm";
+$$("#termToggle button").forEach(b=>{if(b.classList.contains("on"))curTerm=b.dataset.v;});
+function termNow(){return $("#termToggle button.on").dataset.v;}
+function drawDispatch(order){
+  const v=termNow(); const blkT=TERMS.block[v], cuT=TERMS.cu[v];
+  const svg=$("#dispatchSvg"); if(!svg)return;
+  let s="";
+  // CU lanes
+  for(let c=0;c<NC;c++){
+    const y=20+c*54;
+    s+=`<rect x="470" y="${y}" width="410" height="44" rx="8" fill="#12101a" stroke="#334155"/>`;
+    s+=`<text x="484" y="${y+27}" fill="#93a4bd" font-size="12" font-family="monospace">${cuT} ${c}</text>`;
+  }
+  // blocks queued on left
+  for(let b=0;b<NB;b++){
+    const y=14+b*27;
+    s+=`<rect x="20" y="${y}" width="120" height="22" rx="5" fill="#1b2536" stroke="#818cf8"/>`;
+    s+=`<text x="80" y="${y+16}" fill="#c7d2fe" font-size="11" text-anchor="middle" font-family="monospace">${blkT} ${b}</text>`;
+  }
+  s+=`<text x="80" y="238" fill="#6b7c96" font-size="11" text-anchor="middle">待派发队列</text>`;
+  // arrows if order given
+  if(order){
+    order.forEach((b,idx)=>{
+      const cu=idx%NC; const slot=Math.floor(idx/NC);
+      const y0=14+b*27+11;
+      const x1=490+slot*95, y1=20+cu*54+22;
+      s+=`<rect x="${x1}" y="${y1-12}" width="86" height="24" rx="5" fill="#0f1b17" stroke="#5eead4"/>`;
+      s+=`<text x="${x1+43}" y="${y1+4}" fill="#5eead4" font-size="11" text-anchor="middle" font-family="monospace">${blkT} ${b}</text>`;
+      s+=`<line x1="140" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#5eead4" stroke-width="1" opacity="${0.25+0.5*(1-idx/NB)}"/>`;
+    });
+  }
+  svg.innerHTML=s;
+}
+function doDispatch(){
+  const order=[]; for(let i=0;i<NB;i++)order.push(i);
+  for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+  drawDispatch(order);
+  const v=termNow();
+  $("#dispatchOrder").innerHTML=`本次执行顺序:<span class="acc">${order.map(b=>TERMS.block[v]+" "+b).join(" → ")}</span>`;
+}
+$("#dispatch").addEventListener("click",doDispatch);
+$("#reset").addEventListener("click",()=>{drawDispatch();$("#dispatchOrder").textContent="";});
+
+/* init */
+applyTerms("rocm");
+drawDispatch();
+</script>
+</body>
+</html>

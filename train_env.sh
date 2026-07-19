@@ -90,10 +90,17 @@ export XLA_FLAGS
 DETERMINISTIC_MODE="${DETERMINISTIC_MODE:-${EXTRACTED_ENV_MAP[DETERMINISTIC_MODE]:-0}}"
 if [[ "${DETERMINISTIC_MODE,,}" =~ ^(1|y|yes|true)$ ]]; then
     echo "[deterministic] Enabled (DETERMINISTIC_MODE=$DETERMINISTIC_MODE)"
-    # XLA: disable autotuning, use deterministic scatter/conv/fMHA algorithms
-    XLA_FLAGS="${XLA_FLAGS:+$XLA_FLAGS }--xla_gpu_deterministic_ops=true"
+
+    # XLA autotuning: ensure autotune_level=0 for reproducible kernel selection.
+    # This is normally set by the Docker image and by train_env.sh's default
+    # XLA_FLAGS, but we enforce it here defensively: if the user overrides
+    # XLA_FLAGS (e.g. via _env_XLA_FLAGS=...), the autotune_level could be lost.
+    if [[ "${XLA_FLAGS:-}" != *"xla_gpu_autotune_level"* ]]; then
+        XLA_FLAGS="${XLA_FLAGS:+$XLA_FLAGS }--xla_gpu_autotune_level=0"
+        echo "[deterministic] XLA_FLAGS += --xla_gpu_autotune_level=0 (was missing; added)"
+    fi
     export XLA_FLAGS
-    echo "[deterministic] XLA_FLAGS += --xla_gpu_deterministic_ops=true"
+    echo "[deterministic] XLA autotune_level=0 confirmed"
 
     # rocBLAS + MIOpen: disable atomic reductions for deterministic GEMM/conv.
     # This is a SEPARATE code path from xla_gpu_deterministic_ops — the two flags
@@ -127,13 +134,21 @@ if [[ "${DETERMINISTIC_MODE,,}" =~ ^(1|y|yes|true)$ ]]; then
     export JAX_DEFAULT_PRNG_IMPL=threefry2x32
     echo "[deterministic] JAX_DEFAULT_PRNG_IMPL=threefry2x32 (applied post-init by deterministic.py)"
 
-    # CK fused attention backward is non-deterministic even with
-    # NVTE_ALLOW_NONDETERMINISTIC_ALGO=0 (both V2 and V3 backward affected).
-    # NVTE_FUSED_ATTN=0 falls back to JAX native attention which is deterministic,
-    # but requires reduced per_device_batch_size to avoid OOM (~16x throughput loss).
-    export NVTE_FUSED_ATTN=0
-    echo "[deterministic] NVTE_FUSED_ATTN=0 (CK attention disabled for bit-exact determinism)"
-    echo "[deterministic] WARNING: Unfused attention requires reduced per_device_batch_size to avoid OOM"
+    # CK fused attention deterministic kernel:
+    #   - On image rocm/jax-training:maxtext-v26.2-det-te508-aot (or any image
+    #     containing TE >= 2.12.0.dev0+8943023d, i.e. ROCm/TransformerEngine PR #508):
+    #     the CK fused-attention `_deterministic` kernel variants are wired through
+    #     NVTE_ALLOW_NONDETERMINISTIC_ALGO=0 (set above). No further override needed.
+    #     Production batch (bs=8) works directly with ~6% throughput cost vs non-det.
+    #     See harness/reports/2026-05-05_summary.md for the full validation matrix.
+    #   - On any older image (pre-PR-508), the deterministic flag does NOT reach
+    #     CK because TE hardcoded `false` at three call sites in fused_attn.cpp.
+    #     If you must run on such an old image, opt into the legacy unfused
+    #     workaround by passing _env_NVTE_FUSED_ATTN=0 explicitly. That falls
+    #     back to JAX native attention (O(seq^2) memory, ~9.7x throughput loss,
+    #     forces per_device_batch_size=1 to avoid OOM).
+    echo "[deterministic] CK fused attention uses _deterministic variants via NVTE_ALLOW_NONDETERMINISTIC_ALGO=0"
+    echo "[deterministic] (requires PR-#508 image; legacy unfused workaround = pass _env_NVTE_FUSED_ATTN=0)"
 fi
 
 export NCCL_CHECKS_DISABLE=1

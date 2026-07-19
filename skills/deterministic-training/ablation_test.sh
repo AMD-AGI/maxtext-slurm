@@ -4,6 +4,26 @@
 #
 # Total: 7 test pairs × 2 runs × ~8 min = ~112 min (~2 hours)
 # Output: summary table showing which settings are necessary for determinism.
+#
+# ==============================================================================
+# HISTORICAL CONTEXT (pre-PR-508)
+# ==============================================================================
+# This script targets the PRE-PR-508 era where:
+#   - DETERMINISTIC_MODE=1 implied NVTE_FUSED_ATTN=0 (unfused JAX-native attention)
+#   - per_device_batch_size=1 was forced to avoid OOM
+#   - --xla_gpu_deterministic_ops=true was set defensively
+#
+# POST-PR-508 (image rocm/jax-training:maxtext-v26.2-det-te508-aot):
+#   - The sole required flag is NVTE_ALLOW_NONDETERMINISTIC_ALGO=0
+#   - CK fused attention stays enabled (deterministic _deterministic kernel variant)
+#   - per_device_batch_size=8+ works (up to max-pdbs=11 on llama2-70B)
+#   - xla_gpu_deterministic_ops=true is DELIBERATELY NOT SET (152× collapse on MoE)
+#
+# Test 6 ("only NVTE_FUSED_ATTN=0") is now the LEGACY workaround, not the recommended path.
+# To exercise the post-PR-508 ablation, see the ablation table in SKILL.md and the harness
+# results at deterministic-proj/harness/reports/2026-05-05_summary.md (ablation section).
+# A modernized ablation script is on the backlog.
+# ==============================================================================
 
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

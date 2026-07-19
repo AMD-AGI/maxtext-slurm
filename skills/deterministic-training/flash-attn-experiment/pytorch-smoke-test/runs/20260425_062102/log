@@ -1,0 +1,35 @@
+bash: line 2: hostname: command not found
+[smoke] Container: , Linux chi2811 6.8.0-107-generic #107-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar 13 19:51:50 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+[smoke] Python: Python 3.12.12
+[smoke] PyTorch: 2.12.0a0+gitdcaf562 rocm=7.0.51831
+[smoke] flash_attn version: 2.8.3
+ROCm/flash-attention smoke test
+Device: AMD Radeon Graphics  (cap=(9, 5), count=8)
+Shapes: B=2 S=4096 H=64 D=128  dtype=bf16 causal=True dropout=0.0
+Seed:   42
+
+=================================================================
+Test 1 — deterministic=True, 2 runs, expect BIT-EXACT
+=================================================================
+  out: BIT-EXACT
+  dQ : BIT-EXACT
+  dK : BIT-EXACT
+  dV : BIT-EXACT
+RESULT: PASS — kernel is deterministic on this hardware
+
+=================================================================
+Test 2 — deterministic=False, 2 runs, harness sanity check
+=================================================================
+  out: identical
+  dQ : differs (max |Δ|=0.000488281)
+  dK : identical
+  dV : identical
+RESULT: observed non-determinism (harness works)
+
+=================================================================
+Test 3 — throughput, median over 20 iterations
+=================================================================
+  deterministic=True :    10.69 ms/iter   ~   90.0 TFLOP/s (causal fwd+bwd, bf16)
+  deterministic=False:     8.48 ms/iter   ~  113.4 TFLOP/s (causal fwd+bwd, bf16)
+
+OVERALL: PASS — ROCm/flash-attention deterministic backward is bit-exact on this hardware. The JAX FFI / bridge integration is justified.

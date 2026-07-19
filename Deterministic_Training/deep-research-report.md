@@ -19,6 +19,37 @@ Performance impact is workload-dependent and can be large for LLM attention back
 - Enabling cuBLAS determinism via `CUBLAS_WORKSPACE_CONFIG` is documented by NVIDIA as potentially limiting performance (and/or increasing memory footprint), and a public reproduction shows a **~14% throughput drop** in a real workload when this env var is enabled. citeturn2view1turn9view0  
 - TensorFlow explicitly warns that determinism generally reduces performance; additionally, enabling op determinism does **not** make latency/throughput deterministic—only the *numerical outputs and side effects*. citeturn17search2turn11search1  
 
+## Internal 1-node negative-control evidence (MaxText ROCm)
+
+This section records our own 1-node non-deterministic A/B controls in MaxText, using the same analysis rule across setups.
+
+### Protocol (same for all three setups)
+
+- **Goal**: verify that the non-deterministic path actually diverges (negative control), so deterministic replay claims are not explained by logging artifacts.
+- **Pairing rule**: A/B runs are pinned to the same node and matched on model/config knobs (only run label differs).
+- **Non-deterministic setting**: `DETERMINISTIC_MODE=0` with `NVTE_ALLOW_NONDETERMINISTIC_ALGO=1`.
+- **Divergence definition**: first step where aligned `completed step` loss values differ.
+- **Alignment rule**: compare only the common prefix (`0..min(steps_A, steps_B)-1`).
+
+### Results (three setups, six jobs)
+
+| Setup | A job | B job | Common steps compared | First divergence step | A loss @ divergence | B loss @ divergence | Terminal state |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Dense (`llama2-70b`, `pdbs=11`) | `19749` | `19756` | 3 | **2** | 10.831 | 10.660 | A cancelled at step 740; B auto-cancelled on divergence |
+| MoE `dense_matmul` (`ds-proxy-e128-h2048`, `pdbs=6`) | `19747` | `19748` | 1000 | **41** | 11.225 | 11.226 | both success |
+| MoE `sparse_matmul` (`ds-proxy-e128-h2048`, `pdbs=1`, `shardy=True`) | `19753` | `19754` | 200 | **34** | 9.929 | 9.931 | both success |
+
+### Interpretation
+
+- All three setup families show early A/B loss-stream divergence under non-deterministic mode.
+- Divergence appears at different horizons (`step 2`, `34`, `41`), which is expected because sensitivity depends on model path and kernel mix.
+- This negative-control evidence strengthens the deterministic claim: when determinism is disabled, matched A/B runs do not remain numerically identical.
+
+### Scope boundaries
+
+- These six jobs establish **single-node** negative-control behavior only.
+- They do not, by themselves, prove multi-node deterministic reproducibility; that still requires dedicated multi-node A/B replay evidence under fixed topology and software versions.
+
 ## Deterministic mode in the NVIDIA LLM training stack
 
 ### Practical definition

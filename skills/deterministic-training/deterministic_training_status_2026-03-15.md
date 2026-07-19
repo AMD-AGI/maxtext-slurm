@@ -1,6 +1,19 @@
 # Deterministic Training on ROCm — Status Report
 
-**Date:** 2026-03-27 (updated from 2026-03-15)
+> **2026-05 update — superseded by PR #508.** Item 1 ("file and land the 3-line TE fix") is now
+> **DONE**: [ROCm/TransformerEngine PR #508](https://github.com/ROCm/TransformerEngine/pull/508)
+> (merge commit `8943023d`) is shipped in image
+> `rocm/jax-training:maxtext-v26.2-det-te508-aot` (TE `2.12.0.dev0+8943023d`). Deterministic
+> training is now production-viable at **1.06× cost** (903 vs 958 TFLOP/s/dev at max-pdbs on
+> llama2-70B), not 9.7×. The "What doesn't work" section below is historical; the post-PR-508
+> performance is documented in [SKILL.md](SKILL.md), [cheatsheet.md](cheatsheet.md), and the
+> harness validation record at `deterministic-proj/harness/reports/2026-05-05_summary.md`.
+> One new finding post-2026-03: `xla_gpu_deterministic_ops=true` is **toxic on MoE** (152×
+> throughput collapse from scatter serialization) and is now deliberately not set by
+> `DETERMINISTIC_MODE` — see [SKILL.md](SKILL.md) "The xla_gpu_deterministic_ops warning"
+> section and `deterministic-proj/harness/reports/2026-05-06_moe_scatter_serialization.md`.
+
+**Date:** 2026-03-27 (updated from 2026-03-15; superseded by PR #508 — see 2026-05 update at top)
 
 ## What works
 

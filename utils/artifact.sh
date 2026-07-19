@@ -23,8 +23,17 @@ build_artifact() {
 
     mkdir -p "$dst_dir"
 
-    # Respect .gitignore at every level; also exclude .git/ itself.
-    rsync -a --exclude='.git/' --filter=':- .gitignore' "$src_dir/" "$dst_dir/"
+    # Respect .gitignore at every level; also exclude large local build trees
+    # that are not needed by submitted jobs.
+    local -a rsync_args=(
+        -a
+        --exclude='.git/'
+        --filter=':- .gitignore'
+    )
+    if [[ "${ARTIFACT_INCLUDE_BUILD_HIPBLASLT_SCANNER:-0}" != "1" ]]; then
+        rsync_args+=(--exclude='build_hipblaslt_scanner/')
+    fi
+    rsync "${rsync_args[@]}" "$src_dir/" "$dst_dir/"
 
     # Capture git summary into the artifact (it has no .git/ directory).
     if [[ -d "$src_dir/.git" ]]; then

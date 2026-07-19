@@ -378,7 +378,7 @@ $JOB_WORKSPACE/
 ```
 
 - **Interactive mode** (`run_local.sh` with no args) does not build artifacts — it uses the live code.
-- Artifacts exclude `.git/`, `outputs/`, and `*.trace.json*` files, so they are small and fast to build.
+- Artifacts exclude `.git/`, `outputs/`, `*.trace.json*`, and `build_hipblaslt_scanner/` by default, so they are small and fast to build.
 - `rm -rf $JOB_WORKSPACE/<JOB_ID>*` cleans up the per-job dir and job log as before, without touching artifacts.
 - To clean up orphaned artifacts (no longer referenced by any job):
 

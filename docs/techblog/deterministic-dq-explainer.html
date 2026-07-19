@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>为什么 dQ 能做到 Deterministic — 交互讲解</title>
+<style>
+:root{
+  --bg:#0b0f17; --bg2:#111826; --card:#151d2b; --card2:#1b2536;
+  --line:#263248; --txt:#e6edf6; --mut:#93a4bd; --dim:#6b7c96;
+  --acc:#5eead4; --acc2:#818cf8; --warn:#fb7185; --ok:#4ade80; --gold:#fbbf24;
+  --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:linear-gradient(180deg,#0b0f17,#0c1220 60%,#0b0f17);
+  color:var(--txt);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft Yahei",sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--acc)}
+h1,h2,h3{line-height:1.25;font-weight:700}
+code,.mono{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+.mut{color:var(--mut)} .dim{color:var(--dim)}
+.acc{color:var(--acc)} .acc2{color:var(--acc2)} .warn{color:var(--warn)} .ok{color:var(--ok)} .gold{color:var(--gold)}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:50;background:rgba(11,15,23,.82);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;gap:6px;align-items:center;height:56px;overflow-x:auto}
+.nav .brand{font-weight:800;margin-right:14px;white-space:nowrap;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.nav a{color:var(--mut);text-decoration:none;font-size:13px;padding:6px 10px;border-radius:8px;white-space:nowrap}
+.nav a:hover{color:var(--txt);background:var(--card)}
+
+/* hero */
+.hero{padding:66px 0 30px;text-align:center}
+.hero .kicker{display:inline-block;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);
+  border:1px solid var(--line);padding:5px 12px;border-radius:999px;background:var(--card)}
+.hero h1{font-size:clamp(28px,5vw,46px);margin:20px 0 10px;
+  background:linear-gradient(90deg,#e6edf6,#a5b4fc 60%,#5eead4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:720px;margin:0 auto;color:var(--mut);font-size:17px}
+.eqbig{font-family:var(--mono);font-size:19px;margin:26px auto 0;max-width:640px;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;color:var(--txt)}
+
+section{padding:46px 0;border-top:1px solid var(--line)}
+h2.st{font-size:26px;margin:0 0 6px;display:flex;align-items:center;gap:12px}
+h2.st .n{font-family:var(--mono);font-size:15px;color:var(--acc2);border:1px solid var(--line);
+  border-radius:8px;padding:3px 9px;background:var(--card)}
+.lead{color:var(--mut);margin:0 0 24px;max-width:760px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+.grid{display:grid;gap:16px}
+@media(min-width:760px){.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}}
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg2)}
+
+/* glossary */
+.terms{display:grid;gap:12px}
+@media(min-width:760px){.terms{grid-template-columns:1fr 1fr}}
+.term{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.term>button{all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center;width:100%;
+  padding:14px 16px;font-weight:600}
+.term>button:hover{background:var(--card2)}
+.term .t-body{max-height:0;overflow:hidden;transition:max-height .3s ease;color:var(--mut)}
+.term .t-body div{padding:0 16px 15px}
+.term.open .t-body{max-height:300px}
+.term .chev{transition:transform .3s;color:var(--acc)}
+.term.open .chev{transform:rotate(90deg)}
+.kbd{font-family:var(--mono);color:var(--acc);font-size:13.5px}
+
+/* buttons */
+button.btn{all:unset;cursor:pointer;background:linear-gradient(90deg,var(--acc2),#6366f1);color:#0b0f17;font-weight:700;
+  padding:10px 16px;border-radius:10px;font-size:14px;text-align:center;transition:transform .1s,filter .15s}
+button.btn:hover{filter:brightness(1.08)} button.btn:active{transform:translateY(1px)}
+button.btn.ghost{background:transparent;color:var(--acc);border:1px solid var(--line)}
+button.btn.warn{background:linear-gradient(90deg,#fb7185,#f43f5e);color:#1a0510}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+table.ck{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+table.ck th,table.ck td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+table.ck th{background:var(--bg2);color:var(--mut)}
+.hl{background:rgba(251,113,133,.16);color:var(--warn);border-radius:4px;padding:0 2px}
+.same{color:var(--ok)}
+
+.note{border-left:3px solid var(--acc);background:var(--card);padding:12px 16px;border-radius:0 10px 10px 0;color:var(--mut)}
+.note.warn{border-color:var(--warn)}
+.foot{padding:40px 0 70px;color:var(--dim);font-size:13px;text-align:center}
+.src{font-family:var(--mono);font-size:12px;color:var(--dim)}
+svg{max-width:100%;height:auto}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--mut);margin-top:10px}
+.legend .k{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;display:inline-block}
+input[type=range]{width:100%;accent-color:var(--acc2)}
+.stat{font-family:var(--mono)}
+.bar{height:26px;border-radius:8px;background:var(--bg2);border:1px solid var(--line);overflow:hidden;position:relative}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--acc2),#6366f1)}
+.bar.over>i{background:linear-gradient(90deg,#fb7185,#f43f5e)}
+.tag{font-size:12px;padding:3px 9px;border-radius:999px;font-weight:700}
+.tag.ok{background:rgba(74,222,128,.14);color:var(--ok)} .tag.bad{background:rgba(251,113,133,.16);color:var(--warn)}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="wrap">
+  <span class="brand">Deterministic dQ</span>
+  <a href="#intro">问题</a>
+  <a href="#glossary">名词解释</a>
+  <a href="#tensor">张量与 dQ</a>
+  <a href="#source">非确定来源</a>
+  <a href="#why">为何只有 dQ</a>
+  <a href="#demo">实时对比</a>
+  <a href="#fix">修复原理</a>
+  <a href="#cost">代价</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="kicker">Flash-Attention Backward · ROCm/TE PR #508</span>
+  <h1>为什么这套机制能做到 Deterministic?</h1>
+  <p>反向传播里 <b class="acc">dQ</b> 的梯度累加原本用 <code>atomicAdd</code>,导致每次训练结果都不同。
+  本页用图、流程图和交互模拟,拆解<b>非确定性从哪来</b>,以及 <b class="acc2">split-buffer + 固定顺序归约</b> 如何把它变成逐位可复现。</p>
+  <div class="eqbig">dQ<sub>i</sub> = Σ<sub>j</sub> dS<sub>ij</sub> · K<sub>j</sub> &nbsp;&nbsp;<span class="dim">// 对整个 KV 轴求和</span></div>
+</div></header>
+
+<section id="intro"><div class="wrap">
+  <h2 class="st"><span class="n">01</span> 问题:同样的输入,dQ 每次都不一样</h2>
+  <p class="lead">在 gfx950 上用 CK fused attention 反向,把同一组 (Q,K,V) 跑 5 次(独立进程),观察梯度校验和。
+  <b class="warn">dQ 每次都不同</b>,而 <b class="ok">dK 每次都一样</b>。这不是随机种子问题——是浮点累加顺序问题。</p>
+  <div class="card">
+    <table class="ck">
+      <tr><th>run</th><th>dQ checksum</th><th>dK checksum</th></tr>
+      <tr><td>1</td><td><span class="hl">da218326678f7542</span></td><td class="same">edd882395b065f81</td></tr>
+      <tr><td>2</td><td><span class="hl">a946174d047d7634</span></td><td class="same">edd882395b065f81</td></tr>
+      <tr><td>3</td><td><span class="hl">96acc3ac67c9c8cd</span></td><td class="same">edd882395b065f81</td></tr>
+      <tr><td>4</td><td><span class="hl">3307fb7a8268c442</span></td><td class="same">edd882395b065f81</td></tr>
+      <tr><td>5</td><td><span class="hl">16ad64c388308af8</span></td><td class="same">edd882395b065f81</td></tr>
+    </table>
+    <div class="legend">
+      <span class="k"><span class="sw" style="background:var(--warn)"></span>dQ:5 次全不同 → 非确定</span>
+      <span class="k"><span class="sw" style="background:var(--ok)"></span>dK:5 次完全一致 → 确定</span>
+    </div>
+    <p class="src" style="margin-top:12px">Ground truth:<code>NVTE_ALLOW_NONDETERMINISTIC_ALGO=0</code>,bf16,batch=2 seq=1024 heads=8 head_dim=128,
+    gfx950。源自 <code>te-hardcodes-deterministic-false-for-ck-backend.md</code>。</p>
+  </div>
+</div></section>
+<section id="glossary"><div class="wrap">
+  <h2 class="st"><span class="n">02</span> 名词解释</h2>
+  <p class="lead">点开每一项。理解这几个词,后面的机制就顺理成章了。</p>
+  <div class="terms" id="terms">
+    <div class="term"><button>浮点非结合律 (FP non-associativity)<span class="chev">▸</span></button>
+      <div class="t-body"><div>浮点加法有舍入误差,所以 <span class="kbd">(a+b)+c ≠ a+(b+c)</span>。
+      结果取决于<b>相加的顺序</b>。这是所有非确定性的数学根源。</div></div></div>
+
+    <div class="term"><button><span class="kbd">atomicAdd</span> 原子累加<span class="chev">▸</span></button>
+      <div class="t-body"><div>多个 GPU 线程块要往<b>同一个内存地址</b>累加时,用 atomicAdd 保证不丢数据。
+      但它的相加<b>顺序 = 线程块到达的先后</b>,由硬件调度决定,每次运行都不同 → 配合非结合律 → 结果抖动。</div></div></div>
+
+    <div class="term"><button>Thread block / SM<span class="chev">▸</span></button>
+      <div class="t-body"><div>GPU 把计算切成很多线程块(block),分配到流多处理器(SM)上并行执行。
+      哪个 block 先算完、先写内存,<b>没有保证的顺序</b>。</div></div></div>
+
+    <div class="term"><button>dQ / dK / dV<span class="chev">▸</span></button>
+      <div class="t-body"><div>注意力反向传播产出的三个梯度。<b>dK/dV</b> 每个 KV tile 由单一 block 独占累加(确定);
+      <b>dQ</b> 每行要汇总所有 KV tile 的贡献(需跨 block 累加)。</div></div></div>
+
+    <div class="term"><button>KV tile 与 <span class="kbd">kN0</span><span class="chev">▸</span></button>
+      <div class="t-body"><div>Flash-attention 把 KV 序列沿长度切成宽度 <span class="kbd">kN0</span> 的小块(tile)。
+      CK 里 <span class="kbd">kN0 = 128</span>(当 head_dim≤128),否则 64。每块由一个线程块处理。</div></div></div>
+
+    <div class="term"><button><span class="kbd">nsplits</span> 分裂数<span class="chev">▸</span></button>
+      <div class="t-body"><div>确定路径为每个 KV split 分配一个独立 dQ 缓冲,数量
+      <span class="kbd">nsplits = ⌈s_kv / kN0⌉</span>。序列越长 → 分块越多 → nsplits 越大 → 显存越多。</div></div></div>
+
+    <div class="term"><button>Split-K 归约<span class="chev">▸</span></button>
+      <div class="t-body"><div>GEMM 里的经典手法:把沿归约维(这里是 KV 轴)的求和拆成多份并行算,
+      再合并。合并若<b>按固定顺序</b>做,即得确定结果。</div></div></div>
+
+    <div class="term"><button><span class="kbd">FmhaBwdConvertQGradKernel</span><span class="chev">▸</span></button>
+      <div class="t-body"><div>CK 的第二趟 kernel:读回 nsplits 个 dQ_accum 缓冲,对每个 query 位置
+      <b>按 split 下标 0→n-1 的静态顺序</b>求和,写出最终 dQ。顺序固定 = 确定。</div></div></div>
+  </div>
+</div></section>
+<section id="tensor"><div class="wrap">
+  <h2 class="st"><span class="n">03</span> 张量视角:dQ 为什么必须"跨整个 KV 求和"</h2>
+  <p class="lead">注意力的核心是分数矩阵 <b class="acc">S = QKᵀ</b>(形状 <span class="pill">s_q × s_kv</span>)。
+  前向 O = softmax(S)·V。反向时,query 行 i 的梯度 <b class="acc">dQ<sub>i</sub></b> 会用到 <b>S 的第 i 行的全部列</b>,
+  也就是<b>所有</b> KV 位置 j 的贡献。</p>
+
+  <div class="card">
+  <svg viewBox="0 0 900 320" role="img" aria-label="tensor diagram">
+    <defs>
+      <linearGradient id="gq" x1="0" x2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#2dd4bf"/></linearGradient>
+      <linearGradient id="gk" x1="0" x2="1"><stop offset="0" stop-color="#818cf8"/><stop offset="1" stop-color="#6366f1"/></linearGradient>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9z" fill="#93a4bd"/></marker>
+    </defs>
+    <!-- Q -->
+    <g>
+      <rect x="20" y="90" width="70" height="150" rx="6" fill="url(#gq)" opacity=".9"/>
+      <text x="55" y="80" fill="#e6edf6" font-size="13" text-anchor="middle">Q</text>
+      <text x="55" y="258" fill="#93a4bd" font-size="11" text-anchor="middle">s_q × d</text>
+      <rect x="20" y="140" width="70" height="20" fill="#fbbf24" opacity=".9"/>
+      <text x="110" y="154" fill="#fbbf24" font-size="12">行 i (query i)</text>
+    </g>
+    <!-- K^T -->
+    <g>
+      <rect x="250" y="40" width="150" height="60" rx="6" fill="url(#gk)" opacity=".9"/>
+      <text x="325" y="30" fill="#e6edf6" font-size="13" text-anchor="middle">Kᵀ</text>
+      <text x="325" y="118" fill="#93a4bd" font-size="11" text-anchor="middle">d × s_kv</text>
+    </g>
+    <!-- S -->
+    <g>
+      <rect x="250" y="140" width="150" height="100" rx="6" fill="#1b2536" stroke="#263248"/>
+      <text x="325" y="132" fill="#5eead4" font-size="13" text-anchor="middle">S = QKᵀ  (s_q × s_kv)</text>
+      <rect x="250" y="175" width="150" height="18" fill="#fbbf24" opacity=".28"/>
+      <text x="410" y="188" fill="#fbbf24" font-size="11">S 的第 i 行(全部 s_kv 列)</text>
+      <!-- tiles -->
+      <line x1="288" y1="140" x2="288" y2="240" stroke="#263248"/>
+      <line x1="325" y1="140" x2="325" y2="240" stroke="#263248"/>
+      <line x1="363" y1="140" x2="363" y2="240" stroke="#263248"/>
+      <text x="269" y="232" fill="#6b7c96" font-size="9">t0</text>
+      <text x="306" y="232" fill="#6b7c96" font-size="9">t1</text>
+      <text x="344" y="232" fill="#6b7c96" font-size="9">t2</text>
+      <text x="381" y="232" fill="#6b7c96" font-size="9">t3</text>
+    </g>
+    <!-- arrow to dQ -->
+    <line x1="410" y1="184" x2="560" y2="184" stroke="#93a4bd" stroke-width="1.5" marker-end="url(#ar)"/>
+    <text x="485" y="176" fill="#93a4bd" font-size="11" text-anchor="middle">dQ_i = Σ_j dS_ij·K_j</text>
+    <!-- dQ -->
+    <g>
+      <rect x="575" y="90" width="70" height="150" rx="6" fill="#151d2b" stroke="#5eead4"/>
+      <text x="610" y="80" fill="#5eead4" font-size="13" text-anchor="middle">dQ</text>
+      <rect x="575" y="140" width="70" height="20" fill="#fbbf24" opacity=".9"/>
+      <text x="610" y="258" fill="#93a4bd" font-size="11" text-anchor="middle">s_q × d</text>
+    </g>
+    <!-- tiles contribute -->
+    <g font-size="10" fill="#818cf8">
+      <text x="720" y="120">每个 KV tile (t0..t3) 都</text>
+      <text x="720" y="138">往 dQ 的第 i 行贡献一份 partial</text>
+      <text x="720" y="164" fill="#fb7185">→ 4 个来源要汇总到同一行</text>
+      <text x="720" y="182" fill="#fb7185">→ 这就是跨块累加的起点</text>
+    </g>
+    <path d="M300 240 C 340 285, 560 285, 600 240" fill="none" stroke="#818cf8" stroke-width="1.3" opacity=".7" marker-end="url(#ar)"/>
+    <path d="M338 240 C 400 300, 560 300, 605 240" fill="none" stroke="#818cf8" stroke-width="1.3" opacity=".5" marker-end="url(#ar)"/>
+    <path d="M376 240 C 460 315, 560 315, 610 240" fill="none" stroke="#818cf8" stroke-width="1.3" opacity=".35" marker-end="url(#ar)"/>
+  </svg>
+  <div class="legend">
+    <span class="k"><span class="sw" style="background:#5eead4"></span>Q / dQ(query 侧)</span>
+    <span class="k"><span class="sw" style="background:#818cf8"></span>K / KV tiles</span>
+    <span class="k"><span class="sw" style="background:#fbbf24"></span>query 行 i</span>
+  </div>
+  </div>
+  <div class="note" style="margin-top:16px">关键直觉:<b>dQ 的每一行都要接收来自所有 KV tile 的贡献</b>。
+  而 kernel 为了 dK/dV 高效,是<b>按 KV tile 并行</b>的 —— 于是"多个 tile 的 block 同时写 dQ 同一行"就不可避免。</div>
+</div></section>
+<section id="source"><div class="wrap">
+  <h2 class="st"><span class="n">04</span> 非确定性的两个来源(缺一不可)</h2>
+  <p class="lead">非确定 = <b class="warn">浮点非结合律</b> × <b class="warn">不固定的相加顺序</b>。下面这个模拟用真实的 float32 累加演示:
+  同一组 partial,换个相加顺序,低位就不同。</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="margin:0 0 6px">① 浮点非结合律</h3>
+      <p class="mut" style="margin:0 0 12px;font-size:14px">同样 8 个 float32 partial,三种顺序求和。看结果尾部数字。</p>
+      <div class="row"><button class="btn" id="fpRun">重新生成 partials</button></div>
+      <div id="fpOut" class="mono" style="margin-top:14px;font-size:13px;line-height:2"></div>
+      <div class="note" style="margin-top:12px;font-size:13px">左往右 / 右往左 / 打乱 —— 数学上应相等,float32 下<b class="warn">尾部不同</b>。</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 6px">② 顺序由调度决定</h3>
+      <p class="mut" style="margin:0 0 12px;font-size:14px">atomicAdd 把这些 partial 按"线程块到达顺序"相加,每次运行顺序随机。</p>
+      <svg viewBox="0 0 380 150" aria-label="scheduling">
+        <text x="10" y="20" fill="#93a4bd" font-size="12">4 个 block 竞争写 dQ[i]:</text>
+        <g font-size="11">
+          <rect x="10" y="35" width="60" height="26" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="40" y="52" fill="#c7d2fe" text-anchor="middle">block0</text>
+          <rect x="10" y="70" width="60" height="26" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="40" y="87" fill="#c7d2fe" text-anchor="middle">block1</text>
+          <rect x="10" y="105" width="60" height="26" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="40" y="122" fill="#c7d2fe" text-anchor="middle">block2</text>
+        </g>
+        <rect x="250" y="70" width="110" height="30" rx="6" fill="#151d2b" stroke="#fb7185"/>
+        <text x="305" y="90" fill="#fb7185" text-anchor="middle" font-size="12">dQ[i] (共享)</text>
+        <g stroke="#6b7c96" stroke-width="1.3" marker-end="url(#ar)" fill="none" opacity=".8">
+          <path d="M70 48 C 160 48, 190 78, 248 82"/>
+          <path d="M70 83 C 160 83, 190 85, 248 86"/>
+          <path d="M70 118 C 160 118, 190 96, 248 90"/>
+        </g>
+        <text x="150" y="135" fill="#fb7185" font-size="11">到达顺序 = 随机 ⇒ atomicAdd 顺序随机</text>
+      </svg>
+    </div>
+  </div>
+</div></section>
+
+<section id="why"><div class="wrap">
+  <h2 class="st"><span class="n">05</span> 为什么只有 dQ 抖,dK/dV 不抖</h2>
+  <p class="lead">同一个 kernel,写者数量不同,命运就不同。</p>
+  <div class="grid g2">
+    <div class="card" style="border-color:rgba(74,222,128,.4)">
+      <h3 class="ok" style="margin:0 0 8px">dK / dV — 单一写者 ✓</h3>
+      <svg viewBox="0 0 380 120" aria-label="dk">
+        <rect x="10" y="45" width="70" height="30" rx="5" fill="#1b2536" stroke="#4ade80"/><text x="45" y="65" fill="#bbf7d0" font-size="11" text-anchor="middle">block j</text>
+        <path d="M80 60 H 250" stroke="#4ade80" stroke-width="1.6" marker-end="url(#ar)"/>
+        <rect x="255" y="45" width="110" height="30" rx="6" fill="#151d2b" stroke="#4ade80"/><text x="310" y="65" fill="#bbf7d0" font-size="11" text-anchor="middle">dK_j / dV_j</text>
+        <text x="10" y="30" fill="#93a4bd" font-size="11">每个 KV tile j 只由它自己的 block 累加(寄存器内)</text>
+        <text x="10" y="100" fill="#4ade80" font-size="11">无并发、无 atomicAdd ⇒ 天生确定</text>
+      </svg>
+    </div>
+    <div class="card" style="border-color:rgba(251,113,133,.4)">
+      <h3 class="warn" style="margin:0 0 8px">dQ — 多写者 ✗</h3>
+      <svg viewBox="0 0 380 120" aria-label="dq">
+        <g font-size="11">
+          <rect x="10" y="15" width="60" height="24" rx="5" fill="#1b2536" stroke="#fb7185"/><text x="40" y="31" fill="#fecdd3" text-anchor="middle">block0</text>
+          <rect x="10" y="48" width="60" height="24" rx="5" fill="#1b2536" stroke="#fb7185"/><text x="40" y="64" fill="#fecdd3" text-anchor="middle">block1</text>
+          <rect x="10" y="81" width="60" height="24" rx="5" fill="#1b2536" stroke="#fb7185"/><text x="40" y="97" fill="#fecdd3" text-anchor="middle">block2</text>
+        </g>
+        <rect x="255" y="48" width="110" height="26" rx="6" fill="#151d2b" stroke="#fb7185"/><text x="310" y="65" fill="#fecdd3" font-size="11" text-anchor="middle">dQ[i]</text>
+        <g stroke="#fb7185" stroke-width="1.4" marker-end="url(#ar)" fill="none">
+          <path d="M70 27 C 170 27, 200 55, 253 60"/>
+          <path d="M70 60 H 253"/>
+          <path d="M70 93 C 170 93, 200 68, 253 63"/>
+        </g>
+        <text x="150" y="115" fill="#fb7185" font-size="11">3 个 block → 同一地址 ⇒ atomicAdd ⇒ 抖</text>
+      </svg>
+    </div>
+  </div>
+
+  <h3 style="margin:28px 0 6px" class="acc">那前向呢?O<sub>i</sub> 也是"对所有 j 求和",为什么它确定?</h3>
+  <p class="lead" style="margin-bottom:16px">因为<b>非确定不来自"求和"本身,而来自"求和被拆到多个 block 再用 atomicAdd 无序合并"</b>。
+  同一个 Σ<sub>j</sub>,换个并行布局,命运就不同。</p>
+
+  <div class="grid g2">
+    <div class="card" style="border-color:rgba(94,234,212,.4)">
+      <h3 class="acc" style="margin:0 0 8px">前向 O<sub>i</sub> — query 并行,单写者 ✓</h3>
+      <svg viewBox="0 0 380 190" aria-label="forward">
+        <text x="10" y="18" fill="#93a4bd" font-size="11">每个 query 行 i 由一个 block 独占;</text>
+        <text x="10" y="34" fill="#93a4bd" font-size="11">内层<b>顺序</b>扫 KV tile 并累加(online-softmax)</text>
+        <rect x="10" y="72" width="66" height="30" rx="5" fill="#0f1b17" stroke="#5eead4"/>
+        <text x="43" y="92" fill="#5eead4" font-size="11" text-anchor="middle">block i</text>
+        <!-- sequential loop over KV tiles -->
+        <g font-size="10">
+          <rect x="120" y="52" width="46" height="22" rx="4" fill="#1b2536" stroke="#818cf8"/><text x="143" y="67" fill="#c7d2fe" text-anchor="middle">t0</text>
+          <rect x="180" y="52" width="46" height="22" rx="4" fill="#1b2536" stroke="#818cf8"/><text x="203" y="67" fill="#c7d2fe" text-anchor="middle">t1</text>
+          <rect x="240" y="52" width="46" height="22" rx="4" fill="#1b2536" stroke="#818cf8"/><text x="263" y="67" fill="#c7d2fe" text-anchor="middle">t2</text>
+          <rect x="300" y="52" width="46" height="22" rx="4" fill="#1b2536" stroke="#818cf8"/><text x="323" y="67" fill="#c7d2fe" text-anchor="middle">t3</text>
+        </g>
+        <path d="M166 63 H 179" stroke="#5eead4" stroke-width="1.4" marker-end="url(#ar)"/>
+        <path d="M226 63 H 239" stroke="#5eead4" stroke-width="1.4" marker-end="url(#ar)"/>
+        <path d="M286 63 H 299" stroke="#5eead4" stroke-width="1.4" marker-end="url(#ar)"/>
+        <text x="230" y="42" fill="#5eead4" font-size="10" text-anchor="middle">固定顺序 j=0→1→2→3(同一 block 内)</text>
+        <path d="M76 87 C 100 87, 110 63, 120 63" fill="none" stroke="#5eead4" stroke-width="1.3" marker-end="url(#ar)"/>
+        <rect x="10" y="128" width="66" height="30" rx="5" fill="#151d2b" stroke="#5eead4"/>
+        <text x="43" y="148" fill="#5eead4" font-size="11" text-anchor="middle">O_i</text>
+        <path d="M323 74 C 323 120, 90 120, 78 140" fill="none" stroke="#5eead4" stroke-width="1.3" opacity=".7" marker-end="url(#ar)"/>
+        <text x="90" y="178" fill="#5eead4" font-size="11">寄存器内顺序累加 ⇒ 无 atomicAdd ⇒ 确定</text>
+      </svg>
+    </div>
+    <div class="card" style="border-color:rgba(251,113,133,.4)">
+      <h3 class="warn" style="margin:0 0 8px">反向 dQ<sub>i</sub> — KV 并行,多写者 ✗</h3>
+      <svg viewBox="0 0 380 190" aria-label="backward">
+        <text x="10" y="18" fill="#93a4bd" font-size="11">为让 dK/dV 高效,grid 按 KV tile 并行;</text>
+        <text x="10" y="34" fill="#93a4bd" font-size="11">于是每个 tile 的 block 各自往 dQ_i 加一份</text>
+        <g font-size="10">
+          <rect x="10" y="55" width="66" height="22" rx="4" fill="#1b2536" stroke="#fb7185"/><text x="43" y="70" fill="#fecdd3" text-anchor="middle">block t0</text>
+          <rect x="10" y="83" width="66" height="22" rx="4" fill="#1b2536" stroke="#fb7185"/><text x="43" y="98" fill="#fecdd3" text-anchor="middle">block t1</text>
+          <rect x="10" y="111" width="66" height="22" rx="4" fill="#1b2536" stroke="#fb7185"/><text x="43" y="126" fill="#fecdd3" text-anchor="middle">block t2</text>
+        </g>
+        <rect x="255" y="83" width="110" height="26" rx="6" fill="#151d2b" stroke="#fb7185"/>
+        <text x="310" y="100" fill="#fecdd3" font-size="11" text-anchor="middle">dQ_i (共享)</text>
+        <g stroke="#fb7185" stroke-width="1.4" marker-end="url(#ar)" fill="none">
+          <path d="M76 66 C 170 66, 200 92, 253 95"/>
+          <path d="M76 94 H 253"/>
+          <path d="M76 122 C 170 122, 200 100, 253 98"/>
+        </g>
+        <text x="120" y="160" fill="#fb7185" font-size="11">并发写同址,顺序=调度</text>
+        <text x="120" y="177" fill="#fb7185" font-size="11">⇒ atomicAdd ⇒ 抖</text>
+      </svg>
+    </div>
+  </div>
+
+  <table class="ck" style="margin-top:16px">
+    <tr><th>量</th><th>求和维度</th><th>并行方式</th><th>谁在写同一输出</th><th>确定?</th></tr>
+    <tr><td class="acc">前向 O_i</td><td>Σ over j (KV)</td><td>按 query 行</td><td>单个 block(顺序扫 KV)</td><td class="same">✓ 天生确定</td></tr>
+    <tr><td class="ok">反向 dK_j/dV_j</td><td>Σ over i (query)</td><td>按 KV tile</td><td>单个 block 独占</td><td class="same">✓ 天生确定</td></tr>
+    <tr><td class="warn">反向 dQ_i</td><td>Σ over j (KV)</td><td>按 KV tile</td><td><span class="hl">多个 block → atomicAdd</span></td><td class="hl">✗ 非确定</td></tr>
+  </table>
+
+  <div class="note" style="margin-top:16px"><b class="acc">核心判据:</b>"对所有 j 求和"前向后向都有,但它本身不制造非确定。
+  非确定 = <b>求和被拆到多 block + atomicAdd 无序合并</b>。前向 O 每行由单 block 顺序求和(确定);
+  反向 dQ 因 KV-parallel 布局被拆开用 atomicAdd(非确定)。PR #508 就是把 dQ 的合并从"无序 atomic"改回"有序",让它像前向一样确定。</div>
+
+  <div class="note warn" style="margin-top:12px"><b>Caveat:</b> 若前向用 <b>split-KV / flash-decoding</b> 变体(把单行的 KV 求和拆到多 block 再合并),
+  前向<b>也可能</b>非确定——但那是推理/长上下文小 batch 的优化,不是训练前向路径。CK 训练前向的源码审计显示 <b class="acc">zero atomicAdd、zero cross-block reduction</b>。</div>
+</div></section>
+<section id="demo"><div class="wrap">
+  <h2 class="st"><span class="n">06</span> 实时对比:atomicAdd vs 固定顺序归约</h2>
+  <p class="lead">同一组 <span id="npDisp">8</span> 个 float32 partial(模拟 nsplits 个 KV split 对 dQ[i] 的贡献),各跑 5 次:
+  <b class="warn">atomicAdd(随机顺序)</b> vs <b class="acc">deterministic(固定顺序)</b>。看校验和是否稳定。</p>
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <button class="btn warn" id="runAtomic">▶ 跑 5 次 atomicAdd(随机顺序)</button>
+      <button class="btn" id="runDet">▶ 跑 5 次 deterministic(固定顺序)</button>
+      <button class="btn ghost" id="regen">↻ 换一组 partials</button>
+    </div>
+    <div class="grid g2">
+      <div>
+        <div class="pill" style="border-color:var(--warn);color:var(--warn)">atomicAdd(非确定)</div>
+        <table class="ck" style="margin-top:8px"><tbody id="tblAtomic"><tr><td class="dim">点上面按钮运行…</td></tr></tbody></table>
+      </div>
+      <div>
+        <div class="pill" style="border-color:var(--acc);color:var(--acc)">split-buffer + ordered reduce(确定)</div>
+        <table class="ck" style="margin-top:8px"><tbody id="tblDet"><tr><td class="dim">点上面按钮运行…</td></tr></tbody></table>
+      </div>
+    </div>
+    <div id="verdict" class="note" style="margin-top:14px">运行后这里给出结论。</div>
+  </div>
+</div></section>
+
+<section id="fix"><div class="wrap">
+  <h2 class="st"><span class="n">07</span> 修复原理:两趟 kernel</h2>
+  <p class="lead">把"N 个 block 并发 atomicAdd 到同一地址"改成"N 个 block 各写<b>独立</b>缓冲 + 一个 convert kernel 按<b>固定下标顺序</b>求和"。</p>
+
+  <div class="card">
+  <svg viewBox="0 0 900 360" aria-label="fix flowchart">
+    <defs><marker id="ar2" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5eead4"/></marker></defs>
+    <text x="20" y="26" fill="#5eead4" font-size="14" font-weight="700">Pass 1 · 主反向 kernel(零 atomic)</text>
+    <!-- splits -->
+    <g font-size="11">
+      <rect x="20" y="45" width="90" height="30" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="65" y="65" fill="#c7d2fe" text-anchor="middle">KV split 0</text>
+      <rect x="20" y="85" width="90" height="30" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="65" y="105" fill="#c7d2fe" text-anchor="middle">KV split 1</text>
+      <rect x="20" y="125" width="90" height="30" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="65" y="145" fill="#c7d2fe" text-anchor="middle">KV split 2</text>
+      <rect x="20" y="165" width="90" height="30" rx="5" fill="#1b2536" stroke="#818cf8"/><text x="65" y="185" fill="#c7d2fe" text-anchor="middle">KV split 3</text>
+    </g>
+    <!-- own buffers -->
+    <g font-size="11">
+      <rect x="230" y="45" width="150" height="30" rx="5" fill="#0f1b17" stroke="#5eead4"/><text x="305" y="65" fill="#5eead4" text-anchor="middle">dQ_accum[0] (fp32)</text>
+      <rect x="230" y="85" width="150" height="30" rx="5" fill="#0f1b17" stroke="#5eead4"/><text x="305" y="105" fill="#5eead4" text-anchor="middle">dQ_accum[1] (fp32)</text>
+      <rect x="230" y="125" width="150" height="30" rx="5" fill="#0f1b17" stroke="#5eead4"/><text x="305" y="145" fill="#5eead4" text-anchor="middle">dQ_accum[2] (fp32)</text>
+      <rect x="230" y="165" width="150" height="30" rx="5" fill="#0f1b17" stroke="#5eead4"/><text x="305" y="185" fill="#5eead4" text-anchor="middle">dQ_accum[3] (fp32)</text>
+    </g>
+    <g stroke="#5eead4" stroke-width="1.5" marker-end="url(#ar2)" fill="none">
+      <path d="M110 60 H 228"/><path d="M110 100 H 228"/><path d="M110 140 H 228"/><path d="M110 180 H 228"/>
+    </g>
+    <text x="120" y="215" fill="#93a4bd" font-size="11">每个 split 写<b>自己</b>的缓冲 —— 地址互不相交 ⇒ 纯 store,无竞争</text>
+
+    <!-- pass2 -->
+    <text x="20" y="262" fill="#5eead4" font-size="14" font-weight="700">Pass 2 · FmhaBwdConvertQGradKernel(固定顺序)</text>
+    <rect x="230" y="278" width="330" height="46" rx="8" fill="#151d2b" stroke="#5eead4"/>
+    <text x="395" y="299" fill="#e6edf6" font-size="12" text-anchor="middle">for j in 0,1,2,3:  dQ[i] += dQ_accum[j][i]</text>
+    <text x="395" y="316" fill="#93a4bd" font-size="11" text-anchor="middle">下标顺序写死,与调度无关</text>
+    <g stroke="#5eead4" stroke-width="1.4" marker-end="url(#ar2)" fill="none" opacity=".8">
+      <path d="M380 60 C 470 60, 470 278, 470 278"/>
+      <path d="M380 100 C 450 120, 450 278, 460 278"/>
+      <path d="M380 140 C 430 180, 430 278, 450 278"/>
+      <path d="M380 180 C 420 220, 420 278, 440 278"/>
+    </g>
+    <rect x="640" y="278" width="120" height="46" rx="8" fill="#0f1b17" stroke="#4ade80"/>
+    <text x="700" y="299" fill="#4ade80" font-size="13" text-anchor="middle">最终 dQ</text>
+    <text x="700" y="316" fill="#4ade80" font-size="11" text-anchor="middle">bit-exact ✓</text>
+    <path d="M560 301 H 638" stroke="#4ade80" stroke-width="1.6" marker-end="url(#ar2)"/>
+  </svg>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="note"><b class="acc">为什么确定?</b> ① 每个输出元素由独立映射归约,不再并发写同址;② 归约顺序静态固定(0→n-1)。
+    两个非确定来源同时被消除 ⇒ 每次浮点舍入路径完全一致。</div>
+    <div class="note"><b class="gold">PR #508 实际改动:</b> CK 后端原本把 <code>deterministic</code> 参数<b>写死成 false</b>
+    (<code>fused_attn.cpp:491/680/866</code>),修复就是把它真正传下去 → 触发上面的 split 路径。</div>
+  </div>
+</div></section>
+<section id="cost"><div class="wrap">
+  <h2 class="st"><span class="n">08</span> 代价:nsplits 份缓冲 = 显存墙</h2>
+  <p class="lead">确定不是免费的。要为每个 KV split 存一份 fp32 dQ 缓冲:
+  <span class="mono acc">extra = nsplits × h_q × (b×s_q) × d_qk × 4B</span>,其中 <span class="mono">nsplits = ⌈s_kv / kN0⌉</span>。
+  拖动滑块看它怎么爆炸。</p>
+  <div class="card">
+    <div class="row" style="gap:8px;margin-bottom:14px">
+      <button class="btn ghost" data-preset="70">llama2-70B</button>
+      <button class="btn ghost" data-preset="405">llama3.1-405B</button>
+      <button class="btn ghost" data-preset="671">DeepSeek-V3 671B</button>
+    </div>
+    <div class="grid g2">
+      <div>
+        <label class="mut" style="font-size:13px">序列长度 s_kv = s_q = <b class="stat" id="seqV">8192</b></label>
+        <input type="range" id="seq" min="1024" max="16384" step="1024" value="8192">
+        <label class="mut" style="font-size:13px">num_heads_q (h_q) = <b class="stat" id="hV">128</b></label>
+        <input type="range" id="hh" min="8" max="128" step="8" value="128">
+        <label class="mut" style="font-size:13px">per_device_batch_size (b) = <b class="stat" id="bV">5</b></label>
+        <input type="range" id="bb" min="1" max="16" step="1" value="5">
+        <label class="mut" style="font-size:13px">head_dim d_qk = <b class="stat" id="dV">128</b> → kN0=<b class="stat" id="kn0V">128</b></label>
+        <input type="range" id="dd" min="64" max="256" step="64" value="128">
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between"><span class="mut">nsplits</span><b class="stat acc2" id="nsV">64</b></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px"><span class="mut">额外 dQ 缓冲</span><b class="stat" id="memV">—</b></div>
+        <div style="margin:10px 0 4px"><span class="mut" style="font-size:12px">占 MI355X 单卡 HBM (192 GB)</span></div>
+        <div class="bar" id="bar"><i style="width:0%"></i></div>
+        <div style="margin-top:12px" id="fit"></div>
+        <p class="src" style="margin-top:12px">对照 ticket:405B(seq8192,h128,b5,nsplits64)→ +169GB → OOM;
+        671B(seq4096,b16,nsplits32)→ +133GB → OOM。这就是你只能压 pdbs 的原因。</p>
+      </div>
+    </div>
+    <div class="note warn" style="margin-top:14px"><b>为什么不能简单 cap nsplits 省内存?</b>
+    一旦 MAX_SPLITS &lt; ⌈s_kv/kN0⌉,多个 block 又得共享同一 slot → 组内重新 atomicAdd → 确定性没了。
+    要既省内存又保确定,需<b>两级有序归约</b>(kernel 级改写),不是调个参数。</div>
+  </div>
+</div></section>
+
+<div class="foot"><div class="wrap">
+  <p>Ground truth:ROCm/TransformerEngine <b>PR #508</b> · <span class="src">fused_attn.cpp:491/680/866</span> ·
+  <span class="src">fused_attn_ck.cpp:757-784</span> · TE 2.12.0.dev0+8943023d(镜像 maxtext-v26.2-det-te508-aot)</p>
+  <p class="src">源文档:skills/deterministic-training/upstream-bugs/te-hardcodes-deterministic-false-for-ck-backend.md · te-nsplits-cap-ticket.md</p>
+  <p class="dim">交互模拟用真实 float32 累加(Math.fround)演示浮点非结合律与顺序依赖。</p>
+</div></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ---- glossary accordion ---- */
+$$("#terms .term>button").forEach(b=>b.addEventListener("click",()=>b.parentElement.classList.toggle("open")));
+
+/* ---- float32 helpers ---- */
+const f32=Math.fround;
+function orderedSum(arr){let s=0;for(let i=0;i<arr.length;i++)s=f32(s+f32(arr[i]));return s;}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+// full-precision string of a float32 value, to expose low-bit differences
+function show(x){return f32(x).toPrecision(17);}
+// hex "checksum" of the float32 bit pattern of a value
+function ck(x){const b=new ArrayBuffer(4);new DataView(b).setFloat32(0,f32(x));const h=new DataView(b).getUint32(0)>>>0;
+  // mix into a wider-looking hash for display
+  let m=(h>>>0)*2654435761>>>0; return (h>>>0).toString(16).padStart(8,"0")+(m>>>0).toString(16).padStart(8,"0");}
+
+// generate partials with mixed magnitudes so order clearly matters
+let PARTIALS=[];
+function genPartials(n){const a=[];for(let i=0;i<n;i++){const mag=Math.pow(10,Math.floor(Math.random()*7)-3);a.push(f32((Math.random()*2-1)*mag));}return a;}
+const NP=8;
+function regenPartials(){PARTIALS=genPartials(NP);}
+regenPartials();
+
+/* ---- Demo 1: FP non-associativity ---- */
+function renderFP(){
+  const a=PARTIALS;
+  const l2r=orderedSum(a);
+  const r2l=orderedSum(a.slice().reverse());
+  const sh=orderedSum(shuffle(a));
+  const same=(x,y)=>{const sx=show(x),sy=show(y);let o="";for(let i=0;i<sx.length;i++){o+= (sx[i]===sy[i])?sx[i]:`<span class="hl">${sx[i]}</span>`;}return o;};
+  $("#fpOut").innerHTML=
+    `<div>partials: [${a.map(x=>f32(x).toPrecision(5)).join(", ")}]</div>`+
+    `<div style="margin-top:8px">左→右&nbsp;&nbsp;: <span class="acc">${show(l2r)}</span></div>`+
+    `<div>右→左&nbsp;&nbsp;: ${same(r2l,l2r)}</div>`+
+    `<div>打乱&nbsp;&nbsp;&nbsp;&nbsp;: ${same(sh,l2r)}</div>`;
+}
+$("#fpRun").addEventListener("click",()=>{regenPartials();renderFP();syncDemoPartials();});
+renderFP();
+
+/* ---- Demo 2: atomicAdd vs deterministic, 5 runs ---- */
+$("#npDisp").textContent=NP;
+function syncDemoPartials(){/* keep the same PARTIALS across demos */}
+function fiveRuns(mode){
+  const rows=[];
+  for(let r=1;r<=5;r++){
+    const s= mode==="atomic" ? orderedSum(shuffle(PARTIALS)) : orderedSum(PARTIALS);
+    rows.push(ck(s));
+  }
+  return rows;
+}
+function paint(id,rows,det){
+  const first=rows[0];
+  const allSame=rows.every(x=>x===first);
+  $(id).innerHTML=rows.map((h,i)=>{
+    const cls = det ? "same" : (h===first? "":"hl");
+    return `<tr><td class="dim">run ${i+1}</td><td class="${det?'same':(allSame?'':'hl')}">${h}</td></tr>`;
+  }).join("");
+  return allSame;
+}
+let ranA=false,ranD=false,okA=false,okD=false;
+function verdict(){
+  if(!ranA||!ranD){return;}
+  $("#verdict").className="note";
+  $("#verdict").innerHTML= (!okA && okD)
+    ? `<b class="ok">结论一致 ✓</b> atomicAdd 5 次校验和<b class="warn">全不同</b>(顺序随机+浮点非结合律);
+       固定顺序归约 5 次<b class="ok">完全相同</b>。这正是 dQ vs dK 的真实现象。`
+    : `重跑几次:atomicAdd 应出现不同校验和,deterministic 应始终一致。`;
+}
+$("#runAtomic").addEventListener("click",()=>{const r=fiveRuns("atomic");okA=!paint("#tblAtomic",r,false);ranA=true;verdict();});
+$("#runDet").addEventListener("click",()=>{const r=fiveRuns("det");okD=paint("#tblDet",r,true);ranD=true;verdict();});
+$("#regen").addEventListener("click",()=>{regenPartials();renderFP();
+  $("#tblAtomic").innerHTML='<tr><td class="dim">已换 partials,重新运行…</td></tr>';
+  $("#tblDet").innerHTML='<tr><td class="dim">已换 partials,重新运行…</td></tr>';ranA=ranD=false;});
+
+/* ---- Demo 3: nsplits & memory ---- */
+const HBM=192*1024*1024*1024;
+const el={seq:$("#seq"),h:$("#hh"),b:$("#bb"),d:$("#dd")};
+function fmtGB(x){return (x/1024/1024/1024).toFixed(1)+" GB";}
+function updateMem(){
+  const s=+el.seq.value, h=+el.h.value, b=+el.b.value, d=+el.d.value;
+  const kn0 = d<=128?128:64;
+  const nsplits=Math.ceil(s/kn0);
+  const extra = nsplits*h*(b*s)*d*4;
+  $("#seqV").textContent=s; $("#hV").textContent=h; $("#bV").textContent=b; $("#dV").textContent=d;
+  $("#kn0V").textContent=kn0; $("#nsV").textContent=nsplits; $("#memV").textContent=fmtGB(extra);
+  const pct=Math.min(100, extra/HBM*100);
+  const bar=$("#bar"); bar.querySelector("i").style.width=pct.toFixed(1)+"%";
+  const over=extra>HBM*0.42; // rough: weights+acts leave <~80GB free
+  bar.classList.toggle("over",over);
+  $("#fit").innerHTML = over
+    ? `<span class="tag bad">OOM 风险</span> <span class="mut" style="font-size:13px">额外 ${fmtGB(extra)} 超出可用 HBM(权重+激活后约剩 &lt;80GB)</span>`
+    : `<span class="tag ok">可装下</span> <span class="mut" style="font-size:13px">额外 ${fmtGB(extra)} 在预算内</span>`;
+}
+Object.values(el).forEach(x=>x.addEventListener("input",updateMem));
+const presets={70:{s:4096,h:64,b:8,d:128},405:{s:8192,h:128,b:5,d:128},671:{s:4096,h:128,b:16,d:128}};
+$$("[data-preset]").forEach(btn=>btn.addEventListener("click",()=>{
+  const p=presets[btn.dataset.preset]; el.seq.value=p.s; el.h.value=p.h; el.b.value=p.b; el.d.value=p.d; updateMem();
+}));
+updateMem();
+</script>
+</body>
+</html>

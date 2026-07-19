@@ -132,6 +132,11 @@ print(f"CHECKSUM={checksum}")
     for det_val in ["0", "1"]:
         env = os.environ.copy()
         env["HIPBLASLT_DETERMINISTIC"] = det_val
+        # NOTE: This is a single-matmul JAX smoke test (no scatter ops), so
+        # xla_gpu_deterministic_ops is safe here. Do NOT set this flag for
+        # MaxText MoE training — it causes a 152x throughput collapse from
+        # scatter serialization. See skills/deterministic-training/SKILL.md
+        # ("The xla_gpu_deterministic_ops warning").
         env["XLA_FLAGS"] = env.get("XLA_FLAGS", "") + " --xla_gpu_deterministic_ops=true"
 
         print(f"--- Run with HIPBLASLT_DETERMINISTIC={det_val} ---")
@@ -197,6 +202,8 @@ print(f"CHECKSUM={checksum}")
         env = os.environ.copy()
         env["HIPBLASLT_DETERMINISTIC"] = "1"
         env["TF_DETERMINISTIC_OPS"] = "1"
+        # NOTE: Safe in this dense-only matmul smoke test. Do NOT propagate
+        # xla_gpu_deterministic_ops into MoE training — see comment in run_test().
         env["XLA_FLAGS"] = (
             env.get("XLA_FLAGS", "")
             + " --xla_gpu_deterministic_ops=true --xla_gpu_enable_command_buffer=''"

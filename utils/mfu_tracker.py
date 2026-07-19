@@ -13,6 +13,7 @@ Override auto-detection:
 """
 
 import io
+import importlib
 import os
 import re
 import subprocess
@@ -502,7 +503,12 @@ def main():
     _maybe_preinit_jax_distributed(argv)  # no-op in 1-node/proc mode
     _maybe_tag_profiler_output_with_local_rank()  # no-op in 1-node/proc mode
     setup(argv)
-    from MaxText import train as maxtext_train
+    try:
+        from MaxText import train as maxtext_train
+    except ModuleNotFoundError:
+        # Newer MaxText layouts (e.g. src/maxtext/...) expose the trainer
+        # entrypoint under ``maxtext.trainers.pre_train.train``.
+        maxtext_train = importlib.import_module("maxtext.trainers.pre_train.train")
     deterministic.apply_patches(maxtext_train)
     maxtext_train.main(["maxtext_train"] + argv)
     deterministic.print_loss_checksum()
